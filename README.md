@@ -3,7 +3,7 @@
 『**DDD Distilled**』(Vaughn Vernon) をベースにした、対話型ドメイン駆動設計モデリングスキル。
 **Claude Code** / **Codex CLI** / **Gemini CLI** の3環境、**macOS** / **Linux** / **Windows** で動作します。
 
-AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下8フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary。
+AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下9フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows。
 
 ## インストール
 
@@ -75,6 +75,7 @@ Windows では `%USERPROFILE%` 配下に同構造で配置されます（例: `%
 | 6 | `events` | ドメインイベントの命名・属性・因果関係を設計 | `domain-events.md` |
 | 7 | `validate` | ユースケース・シナリオ・UI ウォークスルーでモデルを検証 | `validation.md` |
 | 8 | `glossary` | ユビキタス言語を集約・洗練 | `glossary.md` |
+| 9 | `workflows` | ワークフローのパイプライン構造（ステージ・ステップ・依存・エラー・副作用）を対話で設計 | `workflows.md` |
 
 成果物は、スキルを動かすプロジェクトの `docs/domain/` に書き出されます。
 

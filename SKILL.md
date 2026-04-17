@@ -1,11 +1,13 @@
 ---
 name: ddd
 description: >
-  Interactive Domain-Driven Design modeling sessions based on DDD Distilled (Vaughn Vernon).
-  Guides users through strategic and tactical design via 8 phases: discover, storming, contexts,
-  mapping, aggregates, events, validate, glossary. Each phase is an interactive dialogue where AI acts as
+  Interactive Domain-Driven Design modeling sessions based on DDD Distilled (Vaughn Vernon)
+  and Domain Modeling Made Functional (Scott Wlaschin). Guides users through strategic and
+  tactical design via 9 phases: discover, storming, contexts, mapping, aggregates, events,
+  validate, glossary, workflows. Each phase is an interactive dialogue where AI acts as
   facilitator and domain expert challenger. Use when: "DDD", "ドメイン設計", "ドメインモデリング",
   "Event Storming", "Bounded Context", "集約設計", "ユビキタス言語", "コンテキストマップ",
+  "ワークフロー設計", "パイプライン設計", "ステップ分割", "中間型", "型駆動フロー",
   "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design activity.
 ---
 
@@ -36,8 +38,9 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 | 6 | `events` | Design Domain Events: naming, properties, causality | `domain-events.md` |
 | 7 | `validate` | Validate model with use cases, scenarios, and UI walkthroughs | `validation.md` |
 | 8 | `glossary` | Compile and refine Ubiquitous Language | `glossary.md` |
+| 9 | `workflows` | Design workflow pipelines: stages, steps, dependencies, errors, side-effects | `workflows.md` |
 
-Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8.
+Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9.
 
 ## Interaction Rules
 
@@ -97,6 +100,7 @@ Each phase has a detailed reference file. Read the appropriate file when enterin
 - **events**: Read [references/phase-events.md](references/phase-events.md)
 - **validate**: Read [references/phase-validate.md](references/phase-validate.md)
 - **glossary**: Read [references/phase-glossary.md](references/phase-glossary.md)
+- **workflows**: Read [references/phase-workflows.md](references/phase-workflows.md)
 
 ## Entry Point Behavior
 
