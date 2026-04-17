@@ -1,0 +1,78 @@
+name: install-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bash:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install all
+        run: |
+          ./install.sh --prefix "$RUNNER_TEMP/home"
+      - name: verify files exist
+        run: |
+          for cli in claude codex gemini; do
+            test -f "$RUNNER_TEMP/home/.$cli/skills/ddd/SKILL.md"
+            test -f "$RUNNER_TEMP/home/.$cli/skills/ddd/references/phase-discover.md"
+          done
+      - name: uninstall
+        run: |
+          ./install.sh --prefix "$RUNNER_TEMP/home" --uninstall
+      - name: verify removed
+        run: |
+          for cli in claude codex gemini; do
+            if [ -d "$RUNNER_TEMP/home/.$cli/skills/ddd" ]; then
+              echo "still present: $cli" >&2
+              exit 1
+            fi
+          done
+      - name: single-target install
+        run: |
+          ./install.sh --prefix "$RUNNER_TEMP/home2" --claude
+          test -f "$RUNNER_TEMP/home2/.claude/skills/ddd/SKILL.md"
+          test ! -d "$RUNNER_TEMP/home2/.codex/skills/ddd"
+          test ! -d "$RUNNER_TEMP/home2/.gemini/skills/ddd"
+
+  pwsh:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install all
+        shell: pwsh
+        run: |
+          .\install.ps1 -Prefix "$env:RUNNER_TEMP\home"
+      - name: verify files exist
+        shell: pwsh
+        run: |
+          foreach ($cli in @("claude","codex","gemini")) {
+            $skill = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd\SKILL.md"
+            $ref   = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd\references\phase-discover.md"
+            if (-not (Test-Path $skill)) { throw "missing: $skill" }
+            if (-not (Test-Path $ref))   { throw "missing: $ref" }
+          }
+      - name: uninstall
+        shell: pwsh
+        run: |
+          .\install.ps1 -Prefix "$env:RUNNER_TEMP\home" -Uninstall
+      - name: verify removed
+        shell: pwsh
+        run: |
+          foreach ($cli in @("claude","codex","gemini")) {
+            $dir = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd"
+            if (Test-Path $dir) { throw "still present: $dir" }
+          }
+      - name: single-target install
+        shell: pwsh
+        run: |
+          .\install.ps1 -Prefix "$env:RUNNER_TEMP\home2" -Claude
+          $skill = Join-Path $env:RUNNER_TEMP "home2\.claude\skills\ddd\SKILL.md"
+          if (-not (Test-Path $skill)) { throw "missing: $skill" }
+          $codex = Join-Path $env:RUNNER_TEMP "home2\.codex\skills\ddd"
+          if (Test-Path $codex) { throw "codex should not be installed" }
