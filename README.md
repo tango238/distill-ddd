@@ -1,9 +1,11 @@
 # distill-ddd
 
-『**DDD Distilled**』(Vaughn Vernon) をベースにした、対話型ドメイン駆動設計モデリングスキル。
+『**DDD Distilled**』(Vaughn Vernon) と『**Domain Modeling Made Functional**』(Scott Wlaschin) をベースにした、対話型ドメイン駆動設計モデリングスキル。
 **Claude Code** / **Codex CLI** / **Gemini CLI** の3環境、**macOS** / **Linux** / **Windows** で動作します。
 
-AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下9フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows。
+AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下11フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows, types, simulate。
+
+Phase 1〜8 で戦略的設計からユビキタス言語までをマークダウンに落とし、Phase 9 でワークフローのパイプライン構造を設計、Phase 10 でコンパイル可能な型定義コードに翻訳、Phase 11 で型レベルのシナリオ検証と UI 項目自動抽出まで行います。
 
 ## インストール
 
@@ -76,6 +78,8 @@ Windows では `%USERPROFILE%` 配下に同構造で配置されます（例: `%
 | 7 | `validate` | ユースケース・シナリオ・UI ウォークスルーでモデルを検証 | `validation.md` |
 | 8 | `glossary` | ユビキタス言語を集約・洗練 | `glossary.md` |
 | 9 | `workflows` | ワークフローのパイプライン構造（ステージ・ステップ・依存・エラー・副作用）を対話で設計 | `workflows.md` |
+| 10 | `types` | ドメインモデルをコンパイル可能な型定義に翻訳（TypeScript / Kotlin / Scala / Rust / C# / F#） | `code/types/*.ts` |
+| 11 | `simulate` | 型レベルのシナリオ検証と、`Unvalidated*` 型からの UI フィールド自動抽出 | `code/simulations/`, `ui-fields.md` |
 
 成果物は、スキルを動かすプロジェクトの `docs/domain/` に書き出されます。
 

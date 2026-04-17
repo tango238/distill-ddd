@@ -79,3 +79,28 @@
 - [ ] 副作用が境界(最初と最後)に寄っているか確認した
 - [ ] ワークフロー間の関係(Event 駆動 / orchestration) を整理した
 - [ ] 発見された問題を元フェーズ (aggregates / events / glossary 等) にフィードバックとして記録した
+
+## Phase 10: Types
+
+- [ ] Aggregate Root が AND 型として出力されている
+- [ ] Value Object が Simple 型 (ブランド型) として出力されている
+- [ ] 状態遷移を持つ Entity が OR 型で表現されている
+- [ ] 各 Simple 型に Smart Constructor がある
+- [ ] ステージ型 (UnvalidatedX / ValidatedX 等) が workflows.md と一致している
+- [ ] すべての Command に対応する Workflow 関数型がある
+- [ ] すべての Event が Domain Event の OR 型に含まれる
+- [ ] エラー型が OR 型として階層化されている
+- [ ] ポート (依存) が関数型で定義されている
+- [ ] `code/README.md` の対応表が完成している
+- [ ] `tsc --noEmit` (または対応言語のチェッカー) が警告なしで通る
+- [ ] 未翻訳セクションが `code/README.md` に列挙されている
+
+## Phase 11: Simulate
+
+- [ ] validation.md の全シナリオに対応する型レベルテストがある (ワークフロー検証時)
+- [ ] 全 `Unvalidated*` 型から UI 項目が抽出されている
+- [ ] `ui-fields.md` の各項目が glossary と対応づいている
+- [ ] 検証エラーと UI フィールドのマッピングがある
+- [ ] 状態依存フィールド (productCode → quantity 等) が明示されている
+- [ ] `Option<T>` と `NonEmptyList` の UI 扱いが決定されている
+- [ ] シナリオ検証で発見された問題が他フェーズにフィードバックされている

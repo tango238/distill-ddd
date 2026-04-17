@@ -3,12 +3,17 @@ name: ddd
 description: >
   Interactive Domain-Driven Design modeling sessions based on DDD Distilled (Vaughn Vernon)
   and Domain Modeling Made Functional (Scott Wlaschin). Guides users through strategic and
-  tactical design via 9 phases: discover, storming, contexts, mapping, aggregates, events,
-  validate, glossary, workflows. Each phase is an interactive dialogue where AI acts as
-  facilitator and domain expert challenger. Use when: "DDD", "ドメイン設計", "ドメインモデリング",
-  "Event Storming", "Bounded Context", "集約設計", "ユビキタス言語", "コンテキストマップ",
-  "ワークフロー設計", "パイプライン設計", "ステップ分割", "中間型", "型駆動フロー",
-  "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design activity.
+  tactical design via 11 phases: discover, storming, contexts, mapping, aggregates, events,
+  validate, glossary, workflows, types, simulate. Phases 9-11 take the conceptual model from
+  phases 1-8 and produce workflow pipeline designs, compilable type definitions (TypeScript,
+  Kotlin, Scala, Rust, C#, F#), workflow verification via type-level tests, and automatic
+  UI field enumeration from the domain model. Each phase is an interactive dialogue where
+  AI acts as facilitator and domain expert challenger.
+  Use when: "DDD", "ドメイン設計", "ドメインモデリング", "Event Storming", "Bounded Context",
+  "集約設計", "ユビキタス言語", "コンテキストマップ", "ワークフロー設計", "パイプライン設計",
+  "ステップ分割", "中間型", "型駆動フロー", "型駆動設計", "Domain Modeling Made Functional",
+  "Railway Oriented Programming", "入力画面項目", "フォーム項目洗い出し", "UI 項目抽出",
+  "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design / type modeling activity.
 ---
 
 # /ddd — Interactive Domain-Driven Design
@@ -39,8 +44,10 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 | 7 | `validate` | Validate model with use cases, scenarios, and UI walkthroughs | `validation.md` |
 | 8 | `glossary` | Compile and refine Ubiquitous Language | `glossary.md` |
 | 9 | `workflows` | Design workflow pipelines: stages, steps, dependencies, errors, side-effects | `workflows.md` |
+| 10 | `types` | Translate the domain model into compilable type definitions | `code/types/*.ts` |
+| 11 | `simulate` | Type-level workflow verification and UI field enumeration | `code/simulations/`, `ui-fields.md` |
 
-Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9.
+Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11.
 
 ## Interaction Rules
 
@@ -66,6 +73,18 @@ Same as Facilitator, but after each model fragment:
 2. Compare discovered model against the current phase's design.
 3. Highlight: matches, gaps, violations of DDD principles, naming mismatches.
 4. Suggest concrete refactoring opportunities.
+
+### Type-Driven Mode (Phase 9, 10, 11)
+
+Phases 9-11 follow DMMF principles in addition to the above interaction rules.
+
+1. Phase 9 writes type-driven design drafts in Markdown. Do NOT generate code yet.
+2. Phase 10 outputs only type definitions; function bodies are not written (DMMF principle: "types first, functions later").
+3. After any code generation, verify it compiles with `tsc --noEmit` (or the target language's checker) before claiming completion.
+4. Prioritize "make illegal states unrepresentable" — never use primitive types directly, always route through Simple (branded) types with Smart Constructors.
+5. Errors are returned as `Result<Ok, Err>`; exceptions are reserved for genuinely unrecoverable system failures.
+6. Dependencies are passed as function arguments. Do NOT assume a DI container.
+7. When Phase 9 reveals gaps in aggregates/events/glossary, record them in the workflows.md "フィードバック" section and suggest a return trip to the affected phase rather than silently patching.
 
 ## Session State
 
@@ -101,6 +120,8 @@ Each phase has a detailed reference file. Read the appropriate file when enterin
 - **validate**: Read [references/phase-validate.md](references/phase-validate.md)
 - **glossary**: Read [references/phase-glossary.md](references/phase-glossary.md)
 - **workflows**: Read [references/phase-workflows.md](references/phase-workflows.md)
+- **types**: Read [references/phase-types.md](references/phase-types.md)
+- **simulate**: Read [references/phase-simulate.md](references/phase-simulate.md)
 
 ## Entry Point Behavior
 
