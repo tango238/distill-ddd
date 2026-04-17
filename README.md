@@ -40,13 +40,19 @@ To uninstall:
 
 ### Install locations
 
-| CLI | macOS / Linux | Windows |
+Each CLI gets a skill body (SKILL.md + references) plus the native entry point that enables `/ddd`.
+
+| CLI | Skill body | Entry point (`/ddd`) |
 |---|---|---|
-| Claude Code | `~/.claude/skills/ddd/` | `%USERPROFILE%\.claude\skills\ddd\` |
-| Codex CLI   | `~/.codex/skills/ddd/`  | `%USERPROFILE%\.codex\skills\ddd\` |
-| Gemini CLI  | `~/.gemini/skills/ddd/` | `%USERPROFILE%\.gemini\skills\ddd\` |
+| Claude Code | `~/.claude/skills/ddd/` | same (auto-discovered) |
+| Codex CLI   | `~/.codex/skills/ddd/`  | `~/.codex/prompts/ddd.md` |
+| Gemini CLI  | `~/.gemini/skills/ddd/` | `~/.gemini/commands/ddd.toml` |
+
+Windows paths are the same under `%USERPROFILE%` (e.g. `%USERPROFILE%\.codex\prompts\ddd.md`).
 
 ## Usage
+
+Invoke with `/ddd` in any of the three CLIs:
 
 ```
 /ddd                 Phase selection menu
@@ -56,12 +62,6 @@ To uninstall:
 /ddd --resume        Resume from last session state
 /ddd --status        Show progress across all phases
 ```
-
-### Platform notes
-
-- **Claude Code** — skill is auto-discovered from `~/.claude/skills/`.
-- **Codex CLI** — Codex reads `AGENTS.md` for project instructions. After installing, reference the skill in your project's `AGENTS.md` (e.g. `See ~/.codex/skills/ddd/SKILL.md for DDD facilitation rules.`) or copy SKILL.md content inline.
-- **Gemini CLI** — the skill is loaded via `activate_skill` when available, or can be referenced from `GEMINI.md`.
 
 ## Phases
 

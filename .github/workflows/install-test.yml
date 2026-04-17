@@ -14,31 +14,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: install all
+        run: ./install.sh --prefix "$RUNNER_TEMP/home"
+      - name: verify claude layout
         run: |
-          ./install.sh --prefix "$RUNNER_TEMP/home"
-      - name: verify files exist
+          test -f "$RUNNER_TEMP/home/.claude/skills/ddd/SKILL.md"
+          test -f "$RUNNER_TEMP/home/.claude/skills/ddd/references/phase-discover.md"
+      - name: verify codex layout
         run: |
-          for cli in claude codex gemini; do
-            test -f "$RUNNER_TEMP/home/.$cli/skills/ddd/SKILL.md"
-            test -f "$RUNNER_TEMP/home/.$cli/skills/ddd/references/phase-discover.md"
-          done
+          test -f "$RUNNER_TEMP/home/.codex/skills/ddd/SKILL.md"
+          test -f "$RUNNER_TEMP/home/.codex/skills/ddd/references/phase-discover.md"
+          test -f "$RUNNER_TEMP/home/.codex/prompts/ddd.md"
+          grep -q "Interactive Domain-Driven Design" "$RUNNER_TEMP/home/.codex/prompts/ddd.md"
+      - name: verify gemini layout
+        run: |
+          test -f "$RUNNER_TEMP/home/.gemini/skills/ddd/SKILL.md"
+          test -f "$RUNNER_TEMP/home/.gemini/skills/ddd/references/phase-discover.md"
+          test -f "$RUNNER_TEMP/home/.gemini/commands/ddd.toml"
+          grep -q '^description' "$RUNNER_TEMP/home/.gemini/commands/ddd.toml"
+          grep -q '^prompt' "$RUNNER_TEMP/home/.gemini/commands/ddd.toml"
       - name: uninstall
-        run: |
-          ./install.sh --prefix "$RUNNER_TEMP/home" --uninstall
+        run: ./install.sh --prefix "$RUNNER_TEMP/home" --uninstall
       - name: verify removed
         run: |
-          for cli in claude codex gemini; do
-            if [ -d "$RUNNER_TEMP/home/.$cli/skills/ddd" ]; then
-              echo "still present: $cli" >&2
-              exit 1
-            fi
-          done
+          test ! -d "$RUNNER_TEMP/home/.claude/skills/ddd"
+          test ! -d "$RUNNER_TEMP/home/.codex/skills/ddd"
+          test ! -f "$RUNNER_TEMP/home/.codex/prompts/ddd.md"
+          test ! -d "$RUNNER_TEMP/home/.gemini/skills/ddd"
+          test ! -f "$RUNNER_TEMP/home/.gemini/commands/ddd.toml"
       - name: single-target install
         run: |
           ./install.sh --prefix "$RUNNER_TEMP/home2" --claude
           test -f "$RUNNER_TEMP/home2/.claude/skills/ddd/SKILL.md"
           test ! -d "$RUNNER_TEMP/home2/.codex/skills/ddd"
+          test ! -f "$RUNNER_TEMP/home2/.codex/prompts/ddd.md"
           test ! -d "$RUNNER_TEMP/home2/.gemini/skills/ddd"
+          test ! -f "$RUNNER_TEMP/home2/.gemini/commands/ddd.toml"
 
   pwsh:
     runs-on: windows-latest
@@ -46,27 +56,48 @@ jobs:
       - uses: actions/checkout@v4
       - name: install all
         shell: pwsh
-        run: |
-          .\install.ps1 -Prefix "$env:RUNNER_TEMP\home"
-      - name: verify files exist
+        run: .\install.ps1 -Prefix "$env:RUNNER_TEMP\home"
+      - name: verify claude layout
         shell: pwsh
         run: |
-          foreach ($cli in @("claude","codex","gemini")) {
-            $skill = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd\SKILL.md"
-            $ref   = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd\references\phase-discover.md"
-            if (-not (Test-Path $skill)) { throw "missing: $skill" }
-            if (-not (Test-Path $ref))   { throw "missing: $ref" }
-          }
+          $base = Join-Path $env:RUNNER_TEMP "home\.claude\skills\ddd"
+          if (-not (Test-Path (Join-Path $base "SKILL.md"))) { throw "missing claude SKILL.md" }
+          if (-not (Test-Path (Join-Path $base "references\phase-discover.md"))) { throw "missing claude reference" }
+      - name: verify codex layout
+        shell: pwsh
+        run: |
+          $body = Join-Path $env:RUNNER_TEMP "home\.codex\skills\ddd"
+          $entry = Join-Path $env:RUNNER_TEMP "home\.codex\prompts\ddd.md"
+          if (-not (Test-Path (Join-Path $body "SKILL.md"))) { throw "missing codex skill body" }
+          if (-not (Test-Path (Join-Path $body "references\phase-discover.md"))) { throw "missing codex reference" }
+          if (-not (Test-Path $entry)) { throw "missing codex prompt entry" }
+          if (-not (Select-String -Path $entry -Pattern "Interactive Domain-Driven Design" -Quiet)) { throw "codex entry missing heading" }
+      - name: verify gemini layout
+        shell: pwsh
+        run: |
+          $body = Join-Path $env:RUNNER_TEMP "home\.gemini\skills\ddd"
+          $entry = Join-Path $env:RUNNER_TEMP "home\.gemini\commands\ddd.toml"
+          if (-not (Test-Path (Join-Path $body "SKILL.md"))) { throw "missing gemini skill body" }
+          if (-not (Test-Path (Join-Path $body "references\phase-discover.md"))) { throw "missing gemini reference" }
+          if (-not (Test-Path $entry)) { throw "missing gemini command entry" }
+          if (-not (Select-String -Path $entry -Pattern "^description" -Quiet)) { throw "gemini entry missing description" }
+          if (-not (Select-String -Path $entry -Pattern "^prompt" -Quiet)) { throw "gemini entry missing prompt" }
       - name: uninstall
         shell: pwsh
-        run: |
-          .\install.ps1 -Prefix "$env:RUNNER_TEMP\home" -Uninstall
+        run: .\install.ps1 -Prefix "$env:RUNNER_TEMP\home" -Uninstall
       - name: verify removed
         shell: pwsh
         run: |
-          foreach ($cli in @("claude","codex","gemini")) {
-            $dir = Join-Path $env:RUNNER_TEMP "home\.$cli\skills\ddd"
-            if (Test-Path $dir) { throw "still present: $dir" }
+          $paths = @(
+            "home\.claude\skills\ddd",
+            "home\.codex\skills\ddd",
+            "home\.codex\prompts\ddd.md",
+            "home\.gemini\skills\ddd",
+            "home\.gemini\commands\ddd.toml"
+          )
+          foreach ($p in $paths) {
+            $full = Join-Path $env:RUNNER_TEMP $p
+            if (Test-Path $full) { throw "still present: $full" }
           }
       - name: single-target install
         shell: pwsh
@@ -74,5 +105,7 @@ jobs:
           .\install.ps1 -Prefix "$env:RUNNER_TEMP\home2" -Claude
           $skill = Join-Path $env:RUNNER_TEMP "home2\.claude\skills\ddd\SKILL.md"
           if (-not (Test-Path $skill)) { throw "missing: $skill" }
-          $codex = Join-Path $env:RUNNER_TEMP "home2\.codex\skills\ddd"
+          $codex = Join-Path $env:RUNNER_TEMP "home2\.codex"
           if (Test-Path $codex) { throw "codex should not be installed" }
+          $gemini = Join-Path $env:RUNNER_TEMP "home2\.gemini"
+          if (Test-Path $gemini) { throw "gemini should not be installed" }

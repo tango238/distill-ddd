@@ -43,45 +43,110 @@ if [ "$explicit" -eq 0 ]; then
   want_gemini=1
 fi
 
-copy_skill() {
+copy_body() {
   local target="$1"
   mkdir -p "$target/references"
   cp "$SCRIPT_DIR/SKILL.md" "$target/SKILL.md"
   cp "$SCRIPT_DIR/references/"*.md "$target/references/"
-  echo "  installed -> $target"
 }
 
-remove_skill() {
-  local target="$1"
-  if [ -d "$target" ]; then
-    rm -rf "$target"
-    echo "  removed   -> $target"
+remove_path() {
+  local p="$1"
+  if [ -e "$p" ]; then
+    rm -rf "$p"
+    echo "  removed   -> $p"
   fi
 }
 
-process_cli() {
-  local label="$1"
-  local base="$2"
-  local target="$base/skills/$SKILL_NAME"
-  echo "[$label]"
-  if [ "$uninstall" -eq 1 ]; then
-    remove_skill "$target"
-  else
-    copy_skill "$target"
-  fi
+write_codex_entry() {
+  local body="$1"; local entry="$2"
+  mkdir -p "$(dirname "$entry")"
+  cat > "$entry" <<EOF
+# /ddd — Interactive Domain-Driven Design
+
+Follow the skill defined at \`$body/SKILL.md\`.
+
+When invoked:
+1. Read \`$body/SKILL.md\` for phase structure and interaction rules.
+2. For a specific phase, also read \`$body/references/phase-<name>.md\`.
+3. Save artifacts to \`docs/domain/\` in the current project.
+
+Arguments: \$ARGUMENTS
+EOF
 }
 
-[ "$want_claude" -eq 1 ] && process_cli "Claude Code" "$PREFIX/.claude"
-[ "$want_codex" -eq 1 ] && process_cli "Codex CLI" "$PREFIX/.codex"
-[ "$want_gemini" -eq 1 ] && process_cli "Gemini CLI" "$PREFIX/.gemini"
+write_gemini_entry() {
+  local body="$1"; local entry="$2"
+  mkdir -p "$(dirname "$entry")"
+  cat > "$entry" <<EOF
+description = "Interactive Domain-Driven Design modeling facilitator (DDD Distilled based)"
+prompt = """
+Follow the skill defined at $body/SKILL.md.
+
+When invoked:
+1. Read $body/SKILL.md for phase structure and interaction rules.
+2. For a specific phase, also read $body/references/phase-<name>.md.
+3. Save artifacts to docs/domain/ in the current project.
+
+Arguments: {{args}}
+"""
+EOF
+}
+
+install_claude() {
+  local body="$PREFIX/.claude/skills/$SKILL_NAME"
+  echo "[Claude Code]"
+  copy_body "$body"
+  echo "  installed -> $body"
+}
+
+install_codex() {
+  local body="$PREFIX/.codex/skills/$SKILL_NAME"
+  local entry="$PREFIX/.codex/prompts/$SKILL_NAME.md"
+  echo "[Codex CLI]"
+  copy_body "$body"
+  write_codex_entry "$body" "$entry"
+  echo "  installed -> $body"
+  echo "  entry     -> $entry"
+}
+
+install_gemini() {
+  local body="$PREFIX/.gemini/skills/$SKILL_NAME"
+  local entry="$PREFIX/.gemini/commands/$SKILL_NAME.toml"
+  echo "[Gemini CLI]"
+  copy_body "$body"
+  write_gemini_entry "$body" "$entry"
+  echo "  installed -> $body"
+  echo "  entry     -> $entry"
+}
+
+uninstall_claude() {
+  echo "[Claude Code]"
+  remove_path "$PREFIX/.claude/skills/$SKILL_NAME"
+}
+
+uninstall_codex() {
+  echo "[Codex CLI]"
+  remove_path "$PREFIX/.codex/skills/$SKILL_NAME"
+  remove_path "$PREFIX/.codex/prompts/$SKILL_NAME.md"
+}
+
+uninstall_gemini() {
+  echo "[Gemini CLI]"
+  remove_path "$PREFIX/.gemini/skills/$SKILL_NAME"
+  remove_path "$PREFIX/.gemini/commands/$SKILL_NAME.toml"
+}
 
 if [ "$uninstall" -eq 1 ]; then
+  [ "$want_claude" -eq 1 ] && uninstall_claude
+  [ "$want_codex" -eq 1 ] && uninstall_codex
+  [ "$want_gemini" -eq 1 ] && uninstall_gemini
   echo "done: uninstall complete"
 else
+  [ "$want_claude" -eq 1 ] && install_claude
+  [ "$want_codex" -eq 1 ] && install_codex
+  [ "$want_gemini" -eq 1 ] && install_gemini
   echo "done: installed skill '$SKILL_NAME'"
   echo ""
-  echo "Activate with:"
-  echo "  Claude Code: /$SKILL_NAME"
-  echo "  Codex CLI:   /$SKILL_NAME   (add to AGENTS.md if needed)"
-  echo "  Gemini CLI:  /$SKILL_NAME   (or via activate_skill)"
+  echo "Invoke with /$SKILL_NAME in your CLI."
 fi
