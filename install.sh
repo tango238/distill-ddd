@@ -43,6 +43,18 @@ if [ "$explicit" -eq 0 ]; then
   want_gemini=1
 fi
 
+# Validate --prefix so a misconfigured invocation can never rm -rf something
+# catastrophic downstream. Must be a non-empty absolute path and not '/'.
+if [ -z "$PREFIX" ]; then
+  echo "error: --prefix must not be empty" >&2
+  exit 2
+fi
+case "$PREFIX" in
+  /) echo "error: --prefix must not be '/'" >&2; exit 2 ;;
+  /*) ;;
+  *) echo "error: --prefix must be an absolute path (got: $PREFIX)" >&2; exit 2 ;;
+esac
+
 copy_body() {
   local target="$1"
   mkdir -p "$target/references"

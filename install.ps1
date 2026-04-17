@@ -27,6 +27,19 @@ if (-not ($Claude -or $Codex -or $Gemini -or $All)) {
 }
 if ($All) { $Claude = $true; $Codex = $true; $Gemini = $true }
 
+# Validate -Prefix so a misconfigured invocation can never Remove-Item something
+# catastrophic downstream. Must be non-empty, absolute, and not a filesystem root.
+if ([string]::IsNullOrWhiteSpace($Prefix)) {
+    throw "-Prefix must not be empty"
+}
+if (-not [System.IO.Path]::IsPathRooted($Prefix)) {
+    throw "-Prefix must be an absolute path (got: $Prefix)"
+}
+$normalizedPrefix = $Prefix.TrimEnd('\', '/')
+if ($normalizedPrefix -eq "" -or $normalizedPrefix -match '^[A-Za-z]:$') {
+    throw "-Prefix must not be a filesystem root (got: $Prefix)"
+}
+
 function Copy-Body {
     param([string]$Target)
     $refDest = Join-Path $Target "references"
