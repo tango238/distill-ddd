@@ -3,9 +3,9 @@
 『**DDD Distilled**』(Vaughn Vernon) と『**Domain Modeling Made Functional**』(Scott Wlaschin) をベースにした、対話型ドメイン駆動設計モデリングスキル。
 **Claude Code** / **Codex CLI** / **Gemini CLI** の3環境、**macOS** / **Linux** / **Windows** で動作します。
 
-AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下11フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows, types, simulate。
+AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下12フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows, types, simulate, publish。
 
-Phase 1〜8 で戦略的設計からユビキタス言語までをマークダウンに落とし、Phase 9 でワークフローのパイプライン構造を設計、Phase 10 でコンパイル可能な型定義コードに翻訳、Phase 11 で型レベルのシナリオ検証と UI 項目自動抽出まで行います。
+Phase 1〜8 で戦略的設計からユビキタス言語までをマークダウンに落とし、Phase 9 でワークフローのパイプライン構造を設計、Phase 10 でコンパイル可能な型定義コードに翻訳、Phase 11 で型レベルのシナリオ検証と UI 項目自動抽出まで行います。Phase 12 (`publish`) で `docs/domain/` の全成果物を、共通ナビで相互リンクした自己完結の HTML サイト（ファイルは別だがリンクで束ねられた“1つの HTML”）に変換します。
 
 ## インストール
 
@@ -42,7 +42,7 @@ cd distill-ddd
 
 ### 配置場所
 
-各 CLI に、スキル本体 (SKILL.md + references) と `/ddd` を有効化するネイティブなエントリポイントの両方を配置します。
+各 CLI に、スキル本体 (SKILL.md + references + scripts) と `/ddd` を有効化するネイティブなエントリポイントの両方を配置します。
 
 | CLI | スキル本体 | エントリポイント (`/ddd`) |
 |---|---|---|
@@ -80,8 +80,12 @@ Windows では `%USERPROFILE%` 配下に同構造で配置されます（例: `%
 | 9 | `workflows` | ワークフローのパイプライン構造（ステージ・ステップ・依存・エラー・副作用）を対話で設計 | `workflows.md` |
 | 10 | `types` | ドメインモデルをコンパイル可能な型定義に翻訳（TypeScript / Kotlin / Scala / Rust / C# / F#） | `code/types/*.ts` |
 | 11 | `simulate` | 型レベルのシナリオ検証と、`Unvalidated*` 型からの UI フィールド自動抽出 | `code/simulations/`, `ui-fields.md` |
+| 12 | `publish` | 全成果物を共通ナビで相互リンクした自己完結 HTML サイトに変換 | `docs/domain/*.html` |
 
 成果物は、スキルを動かすプロジェクトの `docs/domain/` に書き出されます。
+
+`/ddd publish` は同梱の `scripts/build_site.py`（Python 3 標準ライブラリのみ・CDN 不要）で
+`docs/domain/*.md` を `*.html` に変換し、全ページ共通の sticky ナビで束ねます。冪等なので編集後に再実行可能。
 
 ## ライセンス
 

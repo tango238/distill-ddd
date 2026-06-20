@@ -43,10 +43,15 @@ if ($normalizedPrefix -eq "" -or $normalizedPrefix -match '^[A-Za-z]:$') {
 function Copy-Body {
     param([string]$Target)
     $refDest = Join-Path $Target "references"
+    $scriptDest = Join-Path $Target "scripts"
     New-Item -ItemType Directory -Force -Path $refDest | Out-Null
+    New-Item -ItemType Directory -Force -Path $scriptDest | Out-Null
     Copy-Item -Force (Join-Path $ScriptDir "SKILL.md") (Join-Path $Target "SKILL.md")
     Get-ChildItem (Join-Path $ScriptDir "references") -Filter "*.md" | ForEach-Object {
         Copy-Item -Force $_.FullName $refDest
+    }
+    Get-ChildItem (Join-Path $ScriptDir "scripts") | ForEach-Object {
+        Copy-Item -Force $_.FullName $scriptDest
     }
 }
 

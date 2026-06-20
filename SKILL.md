@@ -3,16 +3,19 @@ name: ddd
 description: >
   Interactive Domain-Driven Design modeling sessions based on DDD Distilled (Vaughn Vernon)
   and Domain Modeling Made Functional (Scott Wlaschin). Guides users through strategic and
-  tactical design via 11 phases: discover, storming, contexts, mapping, aggregates, events,
-  validate, glossary, workflows, types, simulate. Phases 9-11 take the conceptual model from
-  phases 1-8 and produce workflow pipeline designs, compilable type definitions (TypeScript,
+  tactical design via 12 phases: discover, storming, contexts, mapping, aggregates, events,
+  validate, glossary, workflows, types, simulate, publish. Phases 9-11 take the conceptual model
+  from phases 1-8 and produce workflow pipeline designs, compilable type definitions (TypeScript,
   Kotlin, Scala, Rust, C#, F#), workflow verification via type-level tests, and automatic
-  UI field enumeration from the domain model. Each phase is an interactive dialogue where
-  AI acts as facilitator and domain expert challenger.
+  UI field enumeration from the domain model. Phase 12 (publish) renders all docs/domain
+  artifacts into one self-contained, cross-linked HTML site (separate files joined by a shared
+  nav). Each phase is an interactive dialogue where AI acts as facilitator and domain expert
+  challenger.
   Use when: "DDD", "ドメイン設計", "ドメインモデリング", "Event Storming", "Bounded Context",
   "集約設計", "ユビキタス言語", "コンテキストマップ", "ワークフロー設計", "パイプライン設計",
   "ステップ分割", "中間型", "型駆動フロー", "型駆動設計", "Domain Modeling Made Functional",
   "Railway Oriented Programming", "入力画面項目", "フォーム項目洗い出し", "UI 項目抽出",
+  "HTMLにまとめる", "ドキュメントサイト化", "成果物を1つのHTMLに", "publish",
   "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design / type modeling activity.
 ---
 
@@ -46,8 +49,11 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 | 9 | `workflows` | Design workflow pipelines: stages, steps, dependencies, errors, side-effects | `workflows.md` |
 | 10 | `types` | Translate the domain model into compilable type definitions | `code/types/*.ts` |
 | 11 | `simulate` | Type-level workflow verification and UI field enumeration | `code/simulations/`, `ui-fields.md` |
+| 12 | `publish` | Render all artifacts into one cross-linked HTML site (shared nav) | `docs/domain/*.html` |
 
-Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11.
+Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12.
+`publish` is typically run last (or any time) to turn the accumulated `docs/domain/*.md` into a
+navigable HTML site — "one HTML, files separate but linked".
 
 ## Interaction Rules
 
@@ -122,6 +128,22 @@ Each phase has a detailed reference file. Read the appropriate file when enterin
 - **workflows**: Read [references/phase-workflows.md](references/phase-workflows.md)
 - **types**: Read [references/phase-types.md](references/phase-types.md)
 - **simulate**: Read [references/phase-simulate.md](references/phase-simulate.md)
+- **publish**: Read [references/phase-publish.md](references/phase-publish.md)
+
+## Site Publishing (`/ddd publish`)
+
+To bundle the investigated domain model into one cross-linked HTML site, run the bundled
+generator (Python 3 stdlib only — no pip, no CDN, works offline):
+
+```
+python3 <SKILL_DIR>/scripts/build_site.py docs/domain
+```
+
+`<SKILL_DIR>` is this skill's install dir (`~/.claude/skills/ddd`, `~/.codex/skills/ddd`, or
+`~/.gemini/skills/ddd`). It converts every `docs/domain/*.md` into `*.html`, wiring them with a
+shared sticky nav (current page highlighted) and rewriting intra-doc `.md` links to `.html`.
+See [references/phase-publish.md](references/phase-publish.md) for ASCII→SVG diagram tips and the
+optional `docs/domain/_site.json` (nav order/labels). The script is idempotent — rerun after edits.
 
 ## Entry Point Behavior
 

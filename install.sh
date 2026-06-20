@@ -57,9 +57,10 @@ esac
 
 copy_body() {
   local target="$1"
-  mkdir -p "$target/references"
+  mkdir -p "$target/references" "$target/scripts"
   cp "$SCRIPT_DIR/SKILL.md" "$target/SKILL.md"
   cp "$SCRIPT_DIR/references/"*.md "$target/references/"
+  cp "$SCRIPT_DIR/scripts/"* "$target/scripts/"
 }
 
 remove_path() {
