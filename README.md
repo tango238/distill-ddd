@@ -5,7 +5,7 @@
 
 AI がファシリテーター兼ドメインエキスパート（時に批判者）として振る舞い、以下12フェーズの対話を通じてモデリングをガイドします — discover, storming, contexts, mapping, aggregates, events, validate, glossary, workflows, types, simulate, publish。
 
-Phase 1〜8 で戦略的設計からユビキタス言語までをマークダウンに落とし、Phase 9 でワークフローのパイプライン構造を設計、Phase 10 でコンパイル可能な型定義コードに翻訳、Phase 11 で型レベルのシナリオ検証と UI 項目自動抽出まで行います。Phase 12 (`publish`) で `docs/domain/` の全成果物を、共通ナビで相互リンクした自己完結の HTML サイト（ファイルは別だがリンクで束ねられた“1つの HTML”）に変換します。
+Phase 1〜8 で戦略的設計からユビキタス言語までをマークダウンに落とし、Phase 9 でワークフローのパイプライン構造を設計、Phase 10 でコンパイル可能な型定義コードに翻訳、Phase 11 で型レベルのシナリオ検証と UI 項目自動抽出まで行います。Phase 12 (`publish`) で `docs/domain/` の全成果物を、共通ナビで相互リンクした自己完結の HTML サイト（ファイルは別だがリンクで束ねられた“1つの HTML”）に変換します。Phase 13 (`sync`) は `--analyze` で見つけたモデルと実装の差異を、計画・実装してモデルとコードを一致させます。
 
 ## インストール
 
@@ -61,6 +61,7 @@ Windows では `%USERPROFILE%` 配下に同構造で配置されます（例: `%
 /ddd <phase>                  指定フェーズに直接ジャンプ (discover, storming, contexts, ...)
 /ddd <phase> --analyze        既存コードベースとモデルを突き合わせる
 /ddd <phase> --challenge      批判モード: 前提を徹底的に疑う
+/ddd sync                     モデル⇔実装の差異を計画・実装して解消する
 /ddd --resume                 前回のセッション状態から再開
 /ddd --status                 全フェーズの進捗を表示
 ```
@@ -81,8 +82,14 @@ Windows では `%USERPROFILE%` 配下に同構造で配置されます（例: `%
 | 10 | `types` | ドメインモデルをコンパイル可能な型定義に翻訳（TypeScript / Kotlin / Scala / Rust / C# / F#） | `code/types/*.ts` |
 | 11 | `simulate` | 型レベルのシナリオ検証と、`Unvalidated*` 型からの UI フィールド自動抽出 | `code/simulations/`, `ui-fields.md` |
 | 12 | `publish` | 全成果物を共通ナビで相互リンクした自己完結 HTML サイトに変換 | `docs/domain/*.html` |
+| 13 | `sync` | `--analyze` で見つけたモデル⇔実装の差異を、権威判定 → 計画 → 実装 → モデル再整合まで進める | `sync.md` |
 
 成果物は、スキルを動かすプロジェクトの `docs/domain/` に書き出されます。
+
+`/ddd sync` は `--analyze` の一歩先のフェーズです。`--analyze` が「差異を指摘するだけ」で止まるのに対し、
+`sync` は差異ごとに **モデルとコードのどちらが正か**（model / code / 収束）を決め、コードを直すべき差異は
+**実装計画 → 承認 → TDD 実装** まで進め、コード変更で閉じた差異は `docs/domain` の赤付箋も更新して
+モデルとコードを一致させます。コミットは依頼時のみ・デフォルトブランチなら先にブランチを切ります。
 
 `/ddd publish` は同梱の `scripts/build_site.py`（Python 3 標準ライブラリのみ・CDN 不要）で
 `docs/domain/*.md` を `*.html` に変換し、全ページ共通の sticky ナビで束ねます。冪等なので編集後に再実行可能。

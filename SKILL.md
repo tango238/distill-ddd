@@ -3,8 +3,11 @@ name: ddd
 description: >
   Interactive Domain-Driven Design modeling sessions based on DDD Distilled (Vaughn Vernon)
   and Domain Modeling Made Functional (Scott Wlaschin). Guides users through strategic and
-  tactical design via 12 phases: discover, storming, contexts, mapping, aggregates, events,
-  validate, glossary, workflows, types, simulate, publish. Phases 9-11 take the conceptual model
+  tactical design via 13 phases: discover, storming, contexts, mapping, aggregates, events,
+  validate, glossary, workflows, types, simulate, publish, sync. Phase 13 (sync) reconciles
+  divergences found by --analyze between the domain model and the implementation — judging whether
+  the model or the code is authoritative, then planning and implementing the fix and re-aligning the
+  model. Phases 9-11 take the conceptual model
   from phases 1-8 and produce workflow pipeline designs, compilable type definitions (TypeScript,
   Kotlin, Scala, Rust, C#, F#), workflow verification via type-level tests, and automatic
   UI field enumeration from the domain model. Phase 12 (publish) renders all docs/domain
@@ -16,6 +19,7 @@ description: >
   "ステップ分割", "中間型", "型駆動フロー", "型駆動設計", "Domain Modeling Made Functional",
   "Railway Oriented Programming", "入力画面項目", "フォーム項目洗い出し", "UI 項目抽出",
   "HTMLにまとめる", "ドキュメントサイト化", "成果物を1つのHTMLに", "publish",
+  "モデルと実装の差異", "差異解消", "実装との乖離", "モデルとコードを一致", "差異の実装計画", "sync",
   "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design / type modeling activity.
 ---
 
@@ -30,6 +34,7 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 /ddd <phase>                  Jump to specific phase
 /ddd <phase> --analyze        Compare model against existing codebase
 /ddd <phase> --challenge      Adversarial mode: question every assumption
+/ddd sync                     Reconcile model⇔implementation divergences: plan & implement
 /ddd --resume                 Resume from last session state
 /ddd --status                 Show progress across all phases
 ```
@@ -50,10 +55,14 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 | 10 | `types` | Translate the domain model into compilable type definitions | `code/types/*.ts` |
 | 11 | `simulate` | Type-level workflow verification and UI field enumeration | `code/simulations/`, `ui-fields.md` |
 | 12 | `publish` | Render all artifacts into one cross-linked HTML site (shared nav) | `docs/domain/*.html` |
+| 13 | `sync` | Reconcile model⇔implementation divergences found by `--analyze`: judge authority, plan, implement, re-align the model | `sync.md` |
 
 Phases can run in any order. Recommended flow: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12.
 `publish` is typically run last (or any time) to turn the accumulated `docs/domain/*.md` into a
 navigable HTML site — "one HTML, files separate but linked".
+`sync` is run whenever a `--analyze` pass surfaces divergences between the model and the code: it
+takes those gaps, decides whether the model or the code is authoritative, then plans and implements
+the fix (and updates the model docs) — keeping the two in step.
 
 ## Interaction Rules
 
@@ -79,6 +88,26 @@ Same as Facilitator, but after each model fragment:
 2. Compare discovered model against the current phase's design.
 3. Highlight: matches, gaps, violations of DDD principles, naming mismatches.
 4. Suggest concrete refactoring opportunities.
+5. If divergences are found, point the user to the `sync` phase, which plans and implements the fix
+   (or updates the model) rather than leaving the gap as a note.
+
+### Sync Mode (`sync`)
+
+Resolve model⇔implementation divergences surfaced by `--analyze`. Unlike the conceptual phases,
+`sync` writes code, so it follows an engineering discipline (plan → approve → implement). See
+[references/phase-sync.md](references/phase-sync.md) for the full loop. Key rules:
+
+1. **Divergences are bidirectional** — for each one, decide whether the *model* or the *code* is
+   authoritative (or both converge). Fix code for model-authoritative gaps; update `docs/domain` for
+   code-authoritative ones.
+2. **Never silently accept contradictions** — when reading the code overturns the user's assumption,
+   surface it before reordering or implementing.
+3. **Approval gate** — present options for architecture forks / destructive ops before implementing.
+4. **TDD + honest reporting** — run the project's tests/lint/build; state failures, skips, and
+   out-of-scope work plainly.
+5. **Keep model and code in step** — when code change closes a gap, update the corresponding red
+   sticky / open question in `docs/domain/*.md` in the same pass.
+6. **Commit only when asked**; if on the default branch, branch first; split into logical commits.
 
 ### Type-Driven Mode (Phase 9, 10, 11)
 
@@ -101,9 +130,16 @@ State file: `docs/domain/.ddd-session.json`
   "currentPhase": "storming",
   "completedPhases": ["discover"],
   "lastUpdated": "2026-04-14",
-  "openQuestions": ["Is CheckIn a separate Bounded Context or part of Booking?"]
+  "openQuestions": ["Is CheckIn a separate Bounded Context or part of Booking?"],
+  "divergences": [
+    { "id": 1, "fromPhase": "storming", "type": "gap", "authority": "model", "decision": "...", "status": "done", "commit": "2773a1f" }
+  ]
 }
 ```
+
+`divergences[]` is the structured ledger maintained by the `sync` phase (see
+[references/phase-sync.md](references/phase-sync.md)). `status` ∈ `pending | planned | in-progress |
+done | model-updated | deferred`; `authority` ∈ `model | code | converge`.
 
 On `--resume`: read state file, show summary of where we left off, continue.
 On phase completion: update state, show checklist score.
@@ -129,6 +165,7 @@ Each phase has a detailed reference file. Read the appropriate file when enterin
 - **types**: Read [references/phase-types.md](references/phase-types.md)
 - **simulate**: Read [references/phase-simulate.md](references/phase-simulate.md)
 - **publish**: Read [references/phase-publish.md](references/phase-publish.md)
+- **sync**: Read [references/phase-sync.md](references/phase-sync.md)
 
 ## Site Publishing (`/ddd publish`)
 
