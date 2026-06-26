@@ -19,6 +19,11 @@ jobs:
         run: |
           test -f "$RUNNER_TEMP/home/.claude/skills/ddd/SKILL.md"
           test -f "$RUNNER_TEMP/home/.claude/skills/ddd/references/phase-discover.md"
+      - name: verify scripts + vendored renderer
+        run: |
+          test -f "$RUNNER_TEMP/home/.claude/skills/ddd/scripts/build_site.py"
+          test -f "$RUNNER_TEMP/home/.claude/skills/ddd/scripts/diagrams.py"
+          test -f "$RUNNER_TEMP/home/.claude/skills/ddd/scripts/assets/viz-standalone.js"
       - name: verify codex layout
         run: |
           test -f "$RUNNER_TEMP/home/.codex/skills/ddd/SKILL.md"
@@ -63,6 +68,13 @@ jobs:
           $base = Join-Path $env:RUNNER_TEMP "home\.claude\skills\ddd"
           if (-not (Test-Path (Join-Path $base "SKILL.md"))) { throw "missing claude SKILL.md" }
           if (-not (Test-Path (Join-Path $base "references\phase-discover.md"))) { throw "missing claude reference" }
+      - name: verify scripts + vendored renderer
+        shell: pwsh
+        run: |
+          $s = Join-Path $env:RUNNER_TEMP "home\.claude\skills\ddd\scripts"
+          if (-not (Test-Path (Join-Path $s "build_site.py"))) { throw "missing build_site.py" }
+          if (-not (Test-Path (Join-Path $s "diagrams.py"))) { throw "missing diagrams.py" }
+          if (-not (Test-Path (Join-Path $s "assets\viz-standalone.js"))) { throw "missing viz-standalone.js" }
       - name: verify codex layout
         shell: pwsh
         run: |
