@@ -20,6 +20,7 @@ description: >
   "Railway Oriented Programming", "入力画面項目", "フォーム項目洗い出し", "UI 項目抽出",
   "HTMLにまとめる", "ドキュメントサイト化", "成果物を1つのHTMLに", "publish",
   "モデルと実装の差異", "差異解消", "実装との乖離", "モデルとコードを一致", "差異の実装計画", "sync",
+  "複数フェーズを逐次実行", "フェーズをまとめて実行", "/ddd run", "サブコマンド一覧", "/ddd list",
   "/ddd", "ドメイン分析したい", "モデリングしたい", or any domain design / type modeling activity.
 ---
 
@@ -34,8 +35,11 @@ AI がドメインエキスパート兼ファシリテーターとして DDD モ
 /ddd <phase>                  Jump to specific phase
 /ddd <phase> --analyze        Compare model against existing codebase
 /ddd <phase> --challenge      Adversarial mode: question every assumption
+/ddd run <p1, p2 --flag, ...> Run several phases in sequence (each with its own flags)
+/ddd run <...> --auto         Same, but auto-advance between phases (skip the checkpoint)
 /ddd sync                     Reconcile model⇔implementation divergences: plan & implement
-/ddd --resume                 Resume from last session state
+/ddd list                     List all phases, flags, and commands (aliases: help, ?)
+/ddd --resume                 Resume from last session state (incl. an in-progress run queue)
 /ddd --status                 Show progress across all phases
 ```
 
@@ -63,6 +67,56 @@ navigable HTML site — "one HTML, files separate but linked".
 `sync` is run whenever a `--analyze` pass surfaces divergences between the model and the code: it
 takes those gaps, decides whether the model or the code is authoritative, then plans and implements
 the fix (and updates the model docs) — keeping the two in step.
+
+## Sequential Runner (`/ddd run`)
+
+Run several phases back-to-back without retyping `/ddd` each time.
+
+```
+/ddd run discover, storming --challenge, contexts, mapping --analyze
+/ddd run discover, storming, contexts --auto
+```
+
+**Syntax**: a comma-separated list. Each item is a phase name followed by its own optional flags
+(`--analyze` / `--challenge`). A trailing `--auto` applies to the whole run.
+
+**Behavior**:
+
+1. **Parse** the list into a queue. Validate each phase name against the [Phases](#phases) table
+   (accept the obvious alias `discovery` → `discover`). If an item is unknown, show the closest
+   match and ask before continuing — never silently skip or guess.
+2. **Persist** the queue to `docs/domain/.ddd-session.json` (`queue`, `queueIndex`, `queueAuto`) so
+   `/ddd --resume` can pick a halted run back up.
+3. For each queued phase, in order:
+   - Announce `▶ [i/N] <phase> <flags>` and read `references/phase-<phase>.md`.
+   - Run that phase as a normal interactive dialogue, honoring its flags and all Interaction Rules.
+   - On completion, update `completedPhases`, advance `queueIndex`, and show the phase checklist.
+   - **Checkpoint** (default): show `✓ <phase> 完了 — 次は <next> です。続けますか？（続行 / skip / stop）`
+     and wait for the user. With `--auto`, skip this checkpoint and proceed immediately.
+4. **End of queue** → summarize what was completed and which artifacts changed.
+
+**`--auto` only removes the *between-phase* checkpoint.** In-phase approval gates still stop and
+ask — e.g. `sync`'s destructive-op / architecture-fork gates (Interaction Rules → Sync Mode), or any
+moment a contradiction overturns the user's assumption. Never auto-confirm those.
+
+**Steering**: at any checkpoint the user can say `stop` (halt, keep all progress), `skip` (drop the
+current phase and go to the next), or jump to any phase. A halted run resumes with `/ddd --resume`.
+
+**Missing prerequisites**: phases may run in any order, but if a queued phase reads artifacts that
+don't exist yet (e.g. `aggregates` before `storming`), note it and ask whether to proceed or reorder
+rather than producing a thin artifact.
+
+## Command List (`/ddd list`)
+
+`/ddd list` (aliases `/ddd help`, `/ddd ?`) prints a quick reference and runs **no** phase:
+
+- **Phases** — the 13-row [table](#phases) (#, phase, purpose, artifact).
+- **Flags** — `--analyze` (compare to code), `--challenge` (adversarial), `--auto` (run:
+  auto-advance between phases).
+- **Commands** — `/ddd <phase>`, `/ddd run <list>`, `/ddd sync`, `/ddd --resume`, `/ddd --status`,
+  `/ddd list`.
+- **Recommended flow** — discover → storming → contexts → mapping → aggregates → events → validate →
+  glossary → workflows → types → simulate → publish (→ `sync` whenever `--analyze` finds divergences).
 
 ## Interaction Rules
 
@@ -131,17 +185,27 @@ State file: `docs/domain/.ddd-session.json`
   "completedPhases": ["discover"],
   "lastUpdated": "2026-04-14",
   "openQuestions": ["Is CheckIn a separate Bounded Context or part of Booking?"],
+  "queue": [
+    { "phase": "storming", "flags": ["--challenge"] },
+    { "phase": "contexts", "flags": [] }
+  ],
+  "queueIndex": 0,
+  "queueAuto": false,
   "divergences": [
     { "id": 1, "fromPhase": "storming", "type": "gap", "authority": "model", "decision": "...", "status": "done", "commit": "2773a1f" }
   ]
 }
 ```
 
+`queue` / `queueIndex` / `queueAuto` are written by `/ddd run` so a halted sequence can resume.
+`queueIndex` points at the phase currently in progress; an empty/absent `queue` means no run is active.
+
 `divergences[]` is the structured ledger maintained by the `sync` phase (see
 [references/phase-sync.md](references/phase-sync.md)). `status` ∈ `pending | planned | in-progress |
 done | model-updated | deferred`; `authority` ∈ `model | code | converge`.
 
-On `--resume`: read state file, show summary of where we left off, continue.
+On `--resume`: read state file, show summary of where we left off, continue. If `queue` has
+remaining phases, resume the run at `queueIndex` (honoring `queueAuto`).
 On phase completion: update state, show checklist score.
 
 ## Artifact Location
@@ -188,6 +252,7 @@ When `/ddd` is invoked without arguments:
 
 1. Check for `docs/domain/.ddd-session.json` — if exists, offer to resume.
 2. Otherwise, show the phase table and ask: 「どのフェーズから始めますか？初めてなら `discover` を推奨します。」
+   Mention that `/ddd run discover, storming, …` chains several phases, and `/ddd list` shows the full command reference.
 3. If the project has existing domain docs (`docs/domain/*.md`), acknowledge them and ask whether to build upon or start fresh.
 
 ## Quality Checklist (shown at phase completion)
