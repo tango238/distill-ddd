@@ -115,6 +115,18 @@ def test_workflow_pipeline_dot():
     assert diagrams.workflow_pipeline_dot({"name": "x", "stages": [], "steps": []}) is None
 
 
+def test_graph_id_quoted_for_hyphenated_names():
+    # Codex P2: bare hyphenated graph ids (wf_place-order) break Graphviz/viz.
+    assert diagrams._header("agg_a-b")[0] == 'digraph "agg_a-b" {'
+    wf = {"name": "Place Order", "stages": ["A", "B"],
+          "steps": [{"name": "x", "effect": "pure", "events": [], "fails": False}]}
+    dot = diagrams.workflow_pipeline_dot(wf)
+    assert dot.startswith('digraph "wf_place-order" {')
+    rel = diagrams.workflow_relations_dot(
+        [{"from": "A", "event": "E", "to": "B"}])
+    assert rel.startswith('digraph "wf_relations" {')
+
+
 def test_workflow_relations_and_autoplace():
     rels = diagrams.parse_workflow_relations(WORKFLOWS_MD)
     assert rels == [{"from": "PlaceOrder", "event": "OrderPlaced", "to": "ShipOrder"}]

@@ -248,7 +248,16 @@ INIT_JS = """
 (function(){
   var graphs=document.querySelectorAll('figure.jig-graph');
   if(!graphs.length) return;
-  function wire(viz){
+  // Copy-DOT works without the renderer, so bind it unconditionally (the
+  // documented graceful-degradation path when viz-standalone.js is absent).
+  graphs.forEach(function(g){
+    var node=g.querySelector('script[type=\"text/vnd.graphviz\"]');
+    if(!node) return;
+    var src=node.textContent, b=g.querySelector('[data-act=src]');
+    if(b) b.onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(src); };
+  });
+  if(!(window.Viz&&window.Viz.instance)) return;  // no renderer: keep DOT fallback
+  window.Viz.instance().then(function(viz){
     graphs.forEach(function(g){
       var node=g.querySelector('script[type=\"text/vnd.graphviz\"]');
       if(!node) return;
@@ -267,13 +276,8 @@ INIT_JS = """
         var a=document.createElement('a');a.href=URL.createObjectURL(blob);
         a.download=(g.dataset.kind||'diagram')+'.svg';document.body.appendChild(a);a.click();a.remove();
       };
-      if((b=g.querySelector('[data-act=src]'))) b.onclick=function(){
-        if(navigator.clipboard) navigator.clipboard.writeText(src);
-      };
     });
-  }
-  if(window.Viz&&window.Viz.instance){window.Viz.instance().then(wire);}
-  // no viz-standalone.js → DOT fallback stays visible
+  });
 })();
 """
 

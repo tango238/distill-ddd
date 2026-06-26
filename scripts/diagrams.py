@@ -67,7 +67,9 @@ _EDGE_DEFAULTS = ('edge [fontname="sans-serif", fontsize=10, color="#94a3b8", '
 
 
 def _header(name, rankdir="LR"):
-    return ["digraph %s {" % name,
+    # quote the graph id: _slug() can yield hyphens (e.g. "wf_place-order"),
+    # which Graphviz/viz rejects as a bare identifier.
+    return ['digraph "%s" {' % _esc(name),
             '  rankdir="%s";' % rankdir,
             '  bgcolor="transparent";',
             "  " + _NODE_DEFAULTS,
