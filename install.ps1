@@ -50,8 +50,19 @@ function Copy-Body {
     Get-ChildItem (Join-Path $ScriptDir "references") -Filter "*.md" | ForEach-Object {
         Copy-Item -Force $_.FullName $refDest
     }
-    Get-ChildItem (Join-Path $ScriptDir "scripts") | ForEach-Object {
+    # scripts: loose *.py files plus the vendored renderer under scripts/assets/.
+    # (-File skips __pycache__; the assets subdir is copied explicitly so
+    # viz-standalone.js is not dropped.)
+    Get-ChildItem (Join-Path $ScriptDir "scripts") -File -Filter "*.py" | ForEach-Object {
         Copy-Item -Force $_.FullName $scriptDest
+    }
+    $assetsSrc = Join-Path $ScriptDir "scripts\assets"
+    if (Test-Path $assetsSrc) {
+        $assetsDest = Join-Path $scriptDest "assets"
+        New-Item -ItemType Directory -Force -Path $assetsDest | Out-Null
+        Get-ChildItem $assetsSrc -File | ForEach-Object {
+            Copy-Item -Force $_.FullName $assetsDest
+        }
     }
 }
 

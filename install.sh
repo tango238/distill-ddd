@@ -60,7 +60,13 @@ copy_body() {
   mkdir -p "$target/references" "$target/scripts"
   cp "$SCRIPT_DIR/SKILL.md" "$target/SKILL.md"
   cp "$SCRIPT_DIR/references/"*.md "$target/references/"
-  cp "$SCRIPT_DIR/scripts/"* "$target/scripts/"
+  # scripts: loose *.py files plus the vendored renderer under scripts/assets/.
+  # (plain `cp scripts/*` skips the assets/ subdir and would drop viz-standalone.js)
+  cp "$SCRIPT_DIR/scripts/"*.py "$target/scripts/"
+  if [ -d "$SCRIPT_DIR/scripts/assets" ]; then
+    mkdir -p "$target/scripts/assets"
+    cp "$SCRIPT_DIR/scripts/assets/"* "$target/scripts/assets/"
+  fi
 }
 
 remove_path() {

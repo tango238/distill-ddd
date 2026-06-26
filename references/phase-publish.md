@@ -19,13 +19,54 @@
 
 `--analyze` 系で既存コードからモデルを起こしている場合は、その成果物も同じ `docs/domain/` に置く。
 
-### Step 2: ASCII 図を SVG 化（任意・推奨）
+### Step 2: モデルから図を自動生成（jig 風・dddjava/jig 参考）
 
-`*.md` 内のフロー/関係図（コードフェンスの ASCII アート）は、`docs/domain/diagrams/*.svg` として
-**インライン SVG** に起こし、`![alt](./diagrams/foo.svg)` 参照に差し替えると見栄えが揃う。
-- ダークテーマ（背景 `#0f172a`）に合わせ、コンテキスト色は Spotly=緑 / PMS=青 / Cleaning=橙 等で統一
+手書き SVG ではなく、**構造化された成果物（テーブル）から図を自動生成**する。
+`scripts/diagrams.py` が `*.md` の構造化部分を読んで Graphviz DOT を出力し、`build_site.py` が
+それを各ページに埋め込む。ブラウザ側で **viz-standalone.js（Graphviz の WASM 版）** が DOT を
+インライン SVG に描画する（完全オフライン・`dot` バイナリ不要・CDN 不要）。
+
+**対応する図:**
+
+| 図 | 入力（正本 md の構造化部分） | 表現 |
+|----|------------------------------|------|
+| Context Map | `context-map.md` の関係テーブル + `bounded-contexts.md` の `### 名前 (Core/Supporting/Generic)` | コンテキスト=ノード（色分け／Core=太枠・Generic=破線）、関係=ラベル付きエッジ（C/S・ACL=ダイヤ矢印・OHS/PL）。**Partnership/Shared Kernel は双方向**、**Separate Ways/Big Ball of Mud/🔴 付箋は赤エッジ**で問題を可視化 |
+| Workflow パイプライン（1ワークフロー1図） | `workflows.md` の `### ステージ` 系列 + `#### Step` の副作用・発行 Event・エラー | ステージ型=ノード（左→右で信頼水準が上がる）、ステップ=エッジ（副作用で色分け: read=青/write=橙/message=紫/pure=灰）、**発行イベント=金色のノート**、**失敗しうるステップは赤破線で `⚠ Error` sink にフォーク**（Result 型＝DMMF の2トラック鉄道） |
+| Workflow 間の関係図 | `workflows.md` の `## ワークフロー間の関係図`（`A --[Event]--> B`） | ワークフロー=ノード、ドメインイベント=紫のラベル付きエッジ（イベント駆動の連鎖） |
+| Aggregate⇄Event フロー（1集約1図） | `aggregates.md` の `### 集約` + `**操作**`（`cmd(): … → 発行: Event`）、`domain-events.md` の `発生元 Aggregate`・`Consumer` | Event Storming 配色で **command（青）→ 集約（琥珀）→ ドメインイベント（橙ノート）→ consumer（sky 破線＝結果整合）** のフロー |
+| Event Flow（コンテキスト間） | `domain-events.md` の `## Event Flow`（`A --{Event}--> B`） | コンテキスト=ノード、イベント=橙のラベル付きエッジ |
+
+**図の配置:** 既定では構造化部分の直近に自動挿入する（`context-map.md` → `#` 直下、
+`workflows.md` → 各ワークフローの `### ステージ` 直後 + 関係図フェンス直後、
+`aggregates.md` → 各 `### 集約` 直後、`domain-events.md` → `## Event Flow` 直後）。位置を明示したい場合は
+md 本文に `<!-- ddd:diagram:context-map -->` / `<!-- ddd:diagram:wf-<workflow名> -->` /
+`<!-- ddd:diagram:wf-relations -->` / `<!-- ddd:diagram:agg-<集約名> -->` /
+`<!-- ddd:diagram:event-flow -->` を置くと、そこに描画される。1ファイルに複数図がある場合、
+明示マーカーは**その図だけ**位置を上書きし、残りは従来どおり自動挿入される。
+（ASCII 名は `wf-place-order` のように読める ID になるが、**日本語など非 ASCII 名はハッシュ付き ID**
+になり手書きしづらいので、その場合は自動挿入に任せるのが楽。）
+
+**各図の操作ボタン**（jig 由来・vanilla JS）: `⇄` 方向切替（LR⇄TB）/ `⬇ SVG` ダウンロード / `⧉ DOT` ソースコピー。
+
+**用語集ページ（`glossary.md`）は専用レンダリング**（jig の用語一覧相当・図ではなく HTML）。
+`## {BC}` ごとの `用語 | 英語 | 定義` テーブルを**カードグリッド**に起こし、上部に**絞り込み入力**と
+**論理⇔物理トグル**（`T` ボタンで「用語（日本語）」⇔「英語（型名）」の主従を入れ替え＝jig の論理名⇔物理名）、
+**BC インデックス**（各 BC へジャンプ）を付ける。`英語`/`定義` 列を持たないテーブル（例: コンテキスト横断の
+注意点）は用語集ではないので通常テーブルのまま残る。viz 不要（Graphviz は使わない）。
+
+**viz の vendoring（1回だけ・ネットワーク使用）:**
+
+```sh
+python3 <SKILL_DIR>/scripts/fetch_viz.py          # scripts/assets/ に取得 + SHA 記録
+python3 <SKILL_DIR>/scripts/fetch_viz.py --check  # vendoring 済みコピーの検証
+```
+
+`scripts/assets/viz-standalone.js` が無い場合でも図は壊れない。**DOT ソースを `<pre>` で表示し
+`⧉ DOT` でコピー→外部レンダラ（例: edotor.net / graphviz online）で描画**できる（graceful degradation）。
+
+- 色は `_site.json` の `"colors": {"Spotly":"#22c55e", ...}` で固定可（無ければ自動パレット）
 - ディレクトリツリーやコード列挙は **図ではない**ので `<pre>` のまま残す
-- 繰り返し構造（ライフロサイクル等）はデータ駆動でまとめて生成すると手早い
+- 旧来の手書き SVG（`![alt](./diagrams/foo.svg)`）も引き続き使える（画像として埋め込まれる）
 
 ### Step 3: サイト生成スクリプトを実行
 
@@ -63,7 +104,8 @@ ATX 見出し / GFM パイプ表 / フェンスコード / 入れ子リスト / 
 ## 成果物
 
 - `docs/domain/*.html` — 共通ナビで相互リンクされたドメインモデル・サイト一式
-- 任意: `docs/domain/diagrams/*.svg`、`docs/domain/_site.json`
+- `docs/domain/_assets/viz-standalone.js` — 図描画ランタイム（vendoring 済みのとき自動コピー）
+- 任意: `docs/domain/diagrams/*.svg`（手書き SVG）、`docs/domain/_site.json`
 
 ## メモ
 

@@ -23,7 +23,12 @@ tables, fenced code blocks, ordered/unordered (nestable) lists, blockquotes,
 horizontal rules, images (incl. .svg), links, **bold**, `inline code`.
 Intra-site links ending in .md are rewritten to .html.
 """
-import sys, os, re, json, html
+import sys, os, re, json, html, shutil
+
+try:
+    import diagrams  # same scripts/ dir; optional
+except Exception:
+    diagrams = None
 
 
 # ---------- inline ----------
@@ -115,7 +120,10 @@ def render_list(lines):
 LIST_RE = re.compile(r"\s*([-*+]|\d+\.)\s+")
 
 
-def md_to_html(md):
+DIRECTIVE_RE = re.compile(r"^<!--\s*ddd:diagram:([a-z0-9-]+)\s*-->$")
+
+
+def md_to_html(md, diagrams_dot=None):
     lines = md.split("\n")
     out = []
     i, n = 0, len(lines)
@@ -123,6 +131,14 @@ def md_to_html(md):
         line = lines[i]
         s = line.strip()
         if not s:
+            i += 1
+            continue
+        # diagram directive: <!-- ddd:diagram:context-map -->
+        dm = DIRECTIVE_RE.match(s)
+        if dm:
+            kind = dm.group(1)
+            if diagrams_dot and diagrams_dot.get(kind):
+                out.append(figure_html(kind, diagrams_dot[kind]))
             i += 1
             continue
         # fenced code
@@ -195,6 +211,214 @@ def md_to_html(md):
     return "\n".join(out)
 
 
+# ---------- diagrams ----------
+def figure_html(kind, dot):
+    """Embed DOT as a renderable figure.
+
+    The DOT lives in a <script type="text/vnd.graphviz"> block (raw text, no
+    attribute escaping). viz-standalone.js (if present) renders it to inline
+    SVG on load; without it, the <pre> fallback shows the DOT source plus the
+    ⧉ copy button, so the page degrades gracefully.
+    """
+    safe = dot.replace("</script", "<\\/script").replace("<!--", "<\\!--")
+    pre = html.escape(dot)
+    return (
+        '<figure class="jig-graph" data-kind="%s">\n'
+        '  <div class="jig-toolbar">'
+        '<button type="button" data-act="dir" title="Switch direction">⇄</button>'
+        '<button type="button" data-act="svg" title="Download SVG">⬇ SVG</button>'
+        '<button type="button" data-act="src" title="Copy DOT source">⧉ DOT</button>'
+        '</div>\n'
+        '  <script type="text/vnd.graphviz">%s</script>\n'
+        '  <div class="jig-canvas"><pre class="jig-fallback">%s</pre></div>\n'
+        '</figure>' % (html.escape(kind), safe, pre))
+
+
+GRAPH_CSS = """
+figure.jig-graph{margin:18px 0;background:#0b1220;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+figure.jig-graph .jig-toolbar{display:flex;gap:6px;justify-content:flex-end;padding:8px 10px;border-bottom:1px solid var(--line);background:#0d1526}
+figure.jig-graph .jig-toolbar button{background:#172033;color:var(--muted);border:1px solid var(--line);border-radius:6px;font-size:12px;padding:3px 9px;cursor:pointer}
+figure.jig-graph .jig-toolbar button:hover{background:#1e293b;color:var(--txt)}
+figure.jig-graph .jig-canvas{padding:16px;overflow:auto;text-align:center}
+figure.jig-graph .jig-canvas svg{max-width:100%;height:auto}
+figure.jig-graph .jig-fallback{background:none;border:none;text-align:left;color:var(--muted);margin:0}
+"""
+
+INIT_JS = """
+(function(){
+  var graphs=document.querySelectorAll('figure.jig-graph');
+  if(!graphs.length) return;
+  // Copy-DOT works without the renderer, so bind it unconditionally (the
+  // documented graceful-degradation path when viz-standalone.js is absent).
+  graphs.forEach(function(g){
+    var node=g.querySelector('script[type=\"text/vnd.graphviz\"]');
+    if(!node) return;
+    var src=node.textContent, b=g.querySelector('[data-act=src]');
+    if(b) b.onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(src); };
+  });
+  if(!(window.Viz&&window.Viz.instance)) return;  // no renderer: keep DOT fallback
+  window.Viz.instance().then(function(viz){
+    graphs.forEach(function(g){
+      var node=g.querySelector('script[type=\"text/vnd.graphviz\"]');
+      if(!node) return;
+      var src=node.textContent, dir='LR', canvas=g.querySelector('.jig-canvas');
+      function render(){
+        var dot=src.replace(/rankdir\\s*=\\s*\"?(LR|TB)\"?/,'rankdir=\"'+dir+'\"');
+        try{var svg=viz.renderSVGElement(dot);canvas.innerHTML='';canvas.appendChild(svg);}
+        catch(e){/* keep fallback */}
+      }
+      render();
+      var b;
+      if((b=g.querySelector('[data-act=dir]'))) b.onclick=function(){dir=(dir==='LR'?'TB':'LR');render();};
+      if((b=g.querySelector('[data-act=svg]'))) b.onclick=function(){
+        var s=canvas.querySelector('svg'); if(!s) return;
+        var blob=new Blob([s.outerHTML],{type:'image/svg+xml'});
+        var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+        a.download=(g.dataset.kind||'diagram')+'.svg';document.body.appendChild(a);a.click();a.remove();
+      };
+    });
+  });
+})();
+"""
+
+
+# ---------- glossary (Phase 7) ----------
+def _row_cells(line):
+    line = line.strip()
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+    return [c.strip() for c in line.split("|")]
+
+
+def parse_glossary_terms(body):
+    """Find a `用語 | 英語 | 定義` table in a section → [{term, en, def}]."""
+    lines = body.split("\n")
+    for i, l in enumerate(lines):
+        if "|" not in l:
+            continue
+        header = [c.lower() for c in _row_cells(l)]
+        if not any("用語" in h or "term" in h for h in header):
+            continue
+        if i + 1 >= len(lines) or "-" not in lines[i + 1]:
+            continue
+
+        def col(*names):
+            for idx, h in enumerate(header):
+                if any(n in h for n in names):
+                    return idx
+            return None
+
+        ci = {"term": col("用語", "term"), "en": col("英語", "english", "en"),
+              "def": col("定義", "definition", "def")}
+        # require an 英語/定義 column so cross-context tables (用語|意味A|意味B)
+        # aren't mistaken for a term glossary
+        if ci["en"] is None and ci["def"] is None:
+            continue
+        rows, j = [], i + 2
+        while j < len(lines) and "|" in lines[j] and lines[j].strip():
+            cs = _row_cells(lines[j])
+
+            def g(key):
+                k = ci[key]
+                return cs[k].strip() if k is not None and k < len(cs) else ""
+
+            if g("term") and g("term") != "---":
+                rows.append({"term": g("term"), "en": g("en"), "def": g("def")})
+            j += 1
+        return rows or None
+    return None
+
+
+def glossary_body(md, dots=None):
+    """Render glossary.md as filterable term cards with a logical⇔physical toggle.
+
+    Per-BC sections (## headings) whose table is a 用語/英語/定義 grid become card
+    grids; other sections fall back to normal markdown so nothing is lost. Returns
+    None when no term table is found (caller then uses the default renderer).
+    """
+    heads = list(re.finditer(r"^##\s+(.+?)\s*$", md, re.M))
+    if not heads:
+        return None
+    pre = md[:heads[0].start()]
+    sections = []
+    any_terms = False
+    for k, h in enumerate(heads):
+        body = md[h.end():(heads[k + 1].start() if k + 1 < len(heads) else len(md))]
+        terms = parse_glossary_terms(body)
+        any_terms = any_terms or bool(terms)
+        sections.append((h.group(1).strip(), terms, body))
+    if not any_terms:
+        return None
+
+    out = [md_to_html(pre, dots)]
+    out.append('<div class="gl-toolbar">'
+               '<input class="gl-filter" type="search" placeholder="用語を絞り込み…" '
+               'aria-label="filter terms">'
+               '<button type="button" class="gl-toggle" data-act="toggle">'
+               'T 英語表示</button></div>')
+    idx = []
+    for n, (title, terms, _) in enumerate(sections):
+        if terms:
+            idx.append('<a href="#gl-sec-%d">%s</a>' % (n, html.escape(title)))
+    if idx:
+        out.append('<div class="gl-index">%s</div>' % "".join(idx))
+
+    for n, (title, terms, body) in enumerate(sections):
+        out.append('<h2 id="gl-sec-%d">%s</h2>' % (n, inline(title)))
+        if not terms:
+            out.append(md_to_html(body, dots))
+            continue
+        out.append('<div class="gl-grid">')
+        for t in terms:
+            search = html.escape(" ".join((t["term"], t["en"], t["def"])).lower())
+            phys = '<span class="gl-physical">%s</span>' % inline(t["en"]) if t["en"] else ""
+            out.append('<div class="gl-card" data-search="%s">'
+                       '<div class="gl-name"><span class="gl-logical">%s</span>%s</div>'
+                       '<div class="gl-def">%s</div></div>'
+                       % (search, inline(t["term"]), phys, inline(t["def"])))
+        out.append('</div>')
+    return "\n".join(out)
+
+
+GLOSSARY_CSS = """
+.gl-toolbar{display:flex;gap:10px;margin:18px 0 6px;flex-wrap:wrap}
+.gl-filter{flex:1;min-width:200px;background:#0b1220;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 12px;font-size:14px}
+.gl-toggle{background:#172033;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+.gl-toggle:hover{background:#1e293b;color:var(--txt)}
+.gl-index{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 18px}
+.gl-index a{font-size:12px;color:var(--muted);text-decoration:none;padding:3px 10px;border:1px solid var(--line);border-radius:999px}
+.gl-index a:hover{background:#172033;color:var(--txt)}
+.gl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin:14px 0}
+.gl-card{background:#0b1220;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.gl-card .gl-name{display:flex;flex-direction:column;gap:1px;margin-bottom:6px}
+.gl-logical{font-weight:700;color:#f1f5f9;font-size:15px}
+.gl-physical{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace}
+body.gl-physical-mode .gl-name .gl-logical{order:2;font-weight:400;color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace}
+body.gl-physical-mode .gl-name .gl-physical{order:1;font-weight:700;color:#f1f5f9;font-size:15px;font-family:inherit}
+.gl-def{font-size:13px;color:var(--txt);line-height:1.6}
+.gl-card.gl-hidden{display:none}
+"""
+
+GLOSSARY_JS = """
+(function(){
+  var f=document.querySelector('.gl-filter');
+  if(f){f.addEventListener('input',function(){
+    var q=f.value.trim().toLowerCase();
+    document.querySelectorAll('.gl-card').forEach(function(c){
+      c.classList.toggle('gl-hidden', q && (c.dataset.search||'').indexOf(q)<0);
+    });
+  });}
+  var t=document.querySelector('.gl-toggle');
+  if(t){t.addEventListener('click',function(){
+    var phys=document.body.classList.toggle('gl-physical-mode');
+    t.textContent = phys ? 'T 用語表示' : 'T 英語表示';
+  });}
+})();
+"""
+
+
 # ---------- site ----------
 CSS = """:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--txt:#e2e8f0;--muted:#94a3b8;--accent:#7dd3fc}
 *{box-sizing:border-box}
@@ -231,6 +455,7 @@ PAGE = """<!DOCTYPE html>
 {body}
 </main>
 <footer>{brand} &nbsp;|&nbsp; source: <code>{src}</code> &nbsp;|&nbsp; generated by /ddd publish</footer>
+{foot_extra}
 </body></html>
 """
 
@@ -266,12 +491,35 @@ def main(argv):
         with open(cfgp, encoding="utf-8") as fh:
             cfg = json.load(fh)
 
-    titles, bodies = {}, {}
+    # Auto-generated diagrams (DOT) from the structured model artifacts.
+    dots = {}
+    if diagrams is not None:
+        try:
+            dots = diagrams.available(d, cfg.get("colors"))
+        except Exception as e:
+            print("warn: diagram generation skipped: %s" % e, file=sys.stderr)
+
+    titles, bodies, has_graph, has_glossary = {}, {}, {}, {}
     for slug in slugs:
         with open(os.path.join(d, slug + ".md"), encoding="utf-8") as fh:
             md = fh.read()
+        # Auto-place diagram markers (diagrams.py owns the per-kind anchors).
+        if dots and diagrams is not None:
+            md = diagrams.autoplace(slug, md, dots)
         titles[slug] = first_h1(md) or slug
-        bodies[slug] = md_to_html(md)
+        gl = None
+        if slug == "glossary":
+            try:
+                gl = glossary_body(md, dots)
+            except Exception as e:
+                print("warn: glossary render fell back: %s" % e, file=sys.stderr)
+        if gl is not None:
+            bodies[slug] = gl
+            has_glossary[slug] = True
+        else:
+            bodies[slug] = md_to_html(md, dots)
+            has_glossary[slug] = False
+        has_graph[slug] = "jig-graph" in bodies[slug]
 
     order = cfg.get("order")
     if order:
@@ -291,9 +539,35 @@ def main(argv):
             items.append('<a href="%s.html"%s>%s</a>' % (s, cls, lbl))
         return "".join(items)
 
+    # Copy the vendored Graphviz-in-WASM renderer next to the pages, if shipped.
+    viz_present = False
+    if any(has_graph.values()):
+        src_viz = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "assets", "viz-standalone.js")
+        if os.path.isfile(src_viz):
+            assets = os.path.join(d, "_assets")
+            os.makedirs(assets, exist_ok=True)
+            shutil.copy2(src_viz, os.path.join(assets, "viz-standalone.js"))
+            viz_present = True
+        else:
+            print("note: scripts/assets/viz-standalone.js not vendored — "
+                  "diagrams show DOT source fallback "
+                  "(run scripts/fetch_viz.py to enable in-browser SVG)",
+                  file=sys.stderr)
+
+    css = CSS + (GRAPH_CSS if any(has_graph.values()) else "") \
+        + (GLOSSARY_CSS if any(has_glossary.values()) else "")
     for slug in slugs:
-        page = PAGE.format(title=html.escape(titles[slug]), css=CSS, brand=html.escape(brand),
-                           nav=nav_html(slug), body=bodies[slug], src=html.escape(d + "/" + slug + ".md"))
+        foot = ""
+        if has_graph[slug]:
+            if viz_present:
+                foot += '<script src="./_assets/viz-standalone.js"></script>\n'
+            foot += "<script>%s</script>" % INIT_JS
+        if has_glossary[slug]:
+            foot += "<script>%s</script>" % GLOSSARY_JS
+        page = PAGE.format(title=html.escape(titles[slug]), css=css, brand=html.escape(brand),
+                           nav=nav_html(slug), body=bodies[slug],
+                           src=html.escape(d + "/" + slug + ".md"), foot_extra=foot)
         with open(os.path.join(d, slug + ".html"), "w", encoding="utf-8") as fh:
             fh.write(page)
         print("generated: %s.html" % slug)

@@ -10,6 +10,10 @@ ehthumbs.db
 .idea/
 *.swp
 
+# Python bytecode (build_site.py imports diagrams.py)
+__pycache__/
+*.pyc
+
 # Claude Code local state
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
@@ -20,3 +24,4 @@ ehthumbs.db
 /.codex/prompts/ddd.md
 /.gemini/skills/ddd/
 /.gemini/commands/ddd.toml
+.gstack/
