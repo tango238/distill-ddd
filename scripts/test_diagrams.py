@@ -128,6 +128,70 @@ def test_workflow_relations_and_autoplace():
     assert diagrams.autoplace("workflows", placed, ids) == placed
 
 
+AGGREGATES_MD = """# Aggregates
+### Order (Bounded Context: Order-Taking)
+**操作**:
+- `placeOrder(items)`: 確定 → 発行: `OrderPlaced`
+- `cancelOrder(reason)`: 取消 → 発行: `OrderCancelled`
+**他 Aggregate との参照**: Customer (CustomerId)
+### Shipment (Bounded Context: Shipping)
+**操作**:
+- `dispatch()`: 出荷 → 発行: `OrderShipped`
+"""
+
+EVENTS_MD = """# Domain Events
+#### OrderPlaced
+- **発生元 Aggregate**: Order
+- **トリガー**: placeOrder
+- **Consumer**: Shipping, Billing
+#### OrderShipped
+- **発生元 Aggregate**: Shipment
+- **Consumer**: Notification
+## Event Flow (コンテキスト間)
+Order-Taking --{OrderPlaced}--> Shipping
+Shipping --{OrderShipped}--> Notification
+"""
+
+
+def test_parse_aggregates():
+    aggs = diagrams.parse_aggregates(AGGREGATES_MD)
+    assert [a["name"] for a in aggs] == ["Order", "Shipment"]
+    assert aggs[0]["bc"] == "Order-Taking"
+    cmds = {c["name"]: c["event"] for c in aggs[0]["commands"]}
+    assert cmds == {"placeOrder": "OrderPlaced", "cancelOrder": "OrderCancelled"}
+
+
+def test_parse_domain_events_and_flow():
+    idx = diagrams.parse_domain_events(EVENTS_MD)
+    assert idx["OrderPlaced"]["source"] == "Order"
+    assert idx["OrderPlaced"]["consumers"] == ["Shipping", "Billing"]
+    flow = diagrams.parse_event_flow(EVENTS_MD)
+    assert {"from": "Order-Taking", "event": "OrderPlaced", "to": "Shipping"} in flow
+    assert len(flow) == 2  # the indented prose line is not a flow edge
+
+
+def test_aggregate_flow_dot():
+    aggs = diagrams.parse_aggregates(AGGREGATES_MD)
+    idx = diagrams.parse_domain_events(EVENTS_MD)
+    dot = diagrams.aggregate_flow_dot(aggs[0], idx)
+    # command (blue cds) -> aggregate (amber) -> event (note) -> consumer (sky dashed)
+    assert "shape=cds" in dot and "#3b82f6" in dot
+    assert '"agg_order"' in dot and "#f59e0b" in dot
+    assert "shape=note" in dot and "OrderPlaced" in dot
+    assert '"cons_shipping"' in dot and "dashed" in dot
+    # empty aggregate yields nothing
+    assert diagrams.aggregate_flow_dot({"name": "x", "commands": []}, {}) is None
+
+
+def test_autoplace_aggregates_and_events():
+    placed = diagrams.autoplace("aggregates", AGGREGATES_MD,
+                                ["agg-order", "agg-shipment"])
+    assert "<!-- ddd:diagram:agg-order -->" in placed
+    assert "<!-- ddd:diagram:agg-shipment -->" in placed
+    ev = diagrams.autoplace("domain-events", EVENTS_MD, ["event-flow"])
+    assert "<!-- ddd:diagram:event-flow -->" in ev
+
+
 def test_available_edges():
     # empty dir → nothing
     assert diagrams.available(tempfile.mkdtemp()) == {}

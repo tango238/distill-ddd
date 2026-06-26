@@ -464,6 +464,150 @@ def wf_pipeline_id(name):
     return "wf-" + _slug(name)
 
 
+# ---------- aggregates ⇄ events (Phase 5/6) ----------
+def _agg_name(raw):
+    """`Name (Bounded Context: BC)` → ('Name', 'BC'); tolerates plain `(BC)`."""
+    m = re.search(r"\(.*?Bounded Context\s*[:：]\s*([^)]*)\)", raw)
+    if m:
+        return raw[:m.start()].strip(), m.group(1).strip()
+    p = re.search(r"\(([^)]*)\)\s*$", raw)
+    if p:
+        return raw[:p.start()].strip(), p.group(1).strip()
+    return raw.strip(), ""
+
+
+def parse_aggregates(md):
+    """`### Aggregate` blocks → [{name, bc, commands:[{name, event}]}].
+
+    Commands come from the `**操作**` bullets: `` `cmd(...)`: desc → 発行: `Event` ``.
+    """
+    out = []
+    if not md:
+        return out
+    heads = list(re.finditer(r"^###\s+(.+?)\s*$", md, re.M))
+    for k, h in enumerate(heads):
+        name, bc = _agg_name(h.group(1).strip())
+        body = md[h.end():(heads[k + 1].start() if k + 1 < len(heads) else len(md))]
+        ops = re.search(r"\*\*操作\*\*\s*[:：]?(.*?)(?:\n\s*\*\*[^\n*]+\*\*\s*[:：]|\Z)",
+                        body, re.S)
+        scope = ops.group(1) if ops else body
+        commands = []
+        for line in scope.split("\n"):
+            lm = re.match(r"\s*[-*]\s*`?([A-Za-z]\w*)\s*\(", line)
+            if not lm:
+                continue
+            ev = None
+            em = re.search(r"発行\s*[:：]\s*`?([A-Za-z]\w*)", line)
+            if em:
+                ev = em.group(1)
+            commands.append({"name": lm.group(1), "event": ev})
+        out.append({"name": name, "bc": bc, "commands": commands})
+    return out
+
+
+def parse_domain_events(md):
+    """`#### EventName` blocks → {EventName: {source, trigger, consumers:[...]}}."""
+    idx = {}
+    if not md:
+        return idx
+    heads = list(re.finditer(r"^####\s+(.+?)\s*$", md, re.M))
+    for k, h in enumerate(heads):
+        name = re.sub(r"[`*]", "", h.group(1)).strip()
+        body = md[h.end():(heads[k + 1].start() if k + 1 < len(heads) else len(md))]
+
+        def f(label):
+            mm = re.search(r"\*\*%s\*\*\s*[:：]\s*(.+)" % label, body)
+            return re.sub(r"[`*]", "", mm.group(1)).strip() if mm else ""
+
+        cons = f(r"Consumer")
+        consumers = [c.strip() for c in re.split(r"[,、/]", cons) if c.strip()]
+        idx[name] = {"source": f(r"発生元 Aggregate"),
+                     "trigger": f(r"トリガー"), "consumers": consumers}
+    return idx
+
+
+def parse_event_flow(md):
+    """`Context A --{Event}--> Context B` lines → [{from, event, to}]."""
+    out = []
+    if not md:
+        return out
+    for line in md.split("\n"):
+        m = re.match(r"\s*(.+?)\s*--\{([^}]*)\}-->\s*(.+?)\s*$", line)
+        if m:
+            out.append({"from": m.group(1).strip(), "event": m.group(2).strip(),
+                        "to": m.group(3).strip()})
+    return out
+
+
+def aggregate_flow_dot(agg, eidx):
+    """One aggregate → Event Storming flow: command → aggregate → event → consumer.
+
+    Colors follow Event Storming sticky conventions: command=blue, aggregate=amber,
+    domain event=orange note, downstream consumer=sky (dashed = eventual consistency).
+    """
+    cmds = agg["commands"]
+    events = []
+    for c in cmds:
+        if c["event"] and c["event"] not in events:
+            events.append(c["event"])
+    for ename, info in eidx.items():
+        if info.get("source") == agg["name"] and ename not in events:
+            events.append(ename)
+    if not cmds and not events:
+        return None
+
+    aid = "agg_%s" % _slug(agg["name"])
+    out = _header("agg_" + _slug(agg["name"]))
+    out.append('  "%s" [label="%s", color="#f59e0b", penwidth="2.0", '
+               'fillcolor="#1f2937"];' % (aid, _esc(agg["name"])))
+    for c in cmds:
+        cid = "cmd_%s" % _slug(c["name"])
+        out.append('  "%s" [label="%s", shape=cds, color="#3b82f6", '
+                   'fontcolor="#bfdbfe"];' % (cid, _esc(c["name"])))
+        out.append('  "%s" -> "%s" [color="#3b82f6"];' % (cid, aid))
+    seen = set()
+    for ev in events:
+        eid = "evt_%s" % _slug(ev)
+        if eid not in seen:
+            seen.add(eid)
+            out.append('  "%s" [label="%s", shape=note, fillcolor="#422006", '
+                       'color="#f59e0b", fontcolor="#fde68a"];' % (eid, _esc(ev)))
+        out.append('  "%s" -> "%s" [color="#f59e0b"];' % (aid, eid))
+        for cons in eidx.get(ev, {}).get("consumers", []):
+            coid = "cons_%s" % _slug(cons)
+            out.append('  "%s" [label="%s", color="#7dd3fc", '
+                       'style="filled,dashed", fontcolor="#bae6fd"];'
+                       % (coid, _esc(cons)))
+            out.append('  "%s" -> "%s" [color="#7dd3fc", style="dashed"];'
+                       % (eid, coid))
+    out.append("}")
+    return "\n".join(out)
+
+
+def event_flow_dot(flows):
+    """Cross-context event flow: contexts as nodes, domain events as edges."""
+    if not flows:
+        return None
+    out = _header("event_flow")
+    names = []
+    for f in flows:
+        for n in (f["from"], f["to"]):
+            if n not in names:
+                names.append(n)
+    for n in names:
+        out.append('  "%s" [color="#7dd3fc", penwidth="1.6"];' % _esc(n))
+    for f in flows:
+        out.append('  "%s" -> "%s" [label="%s", color="#f59e0b", '
+                   'fontcolor="#fde68a", penwidth="1.5"];'
+                   % (_esc(f["from"]), _esc(f["to"]), _esc(f["event"])))
+    out.append("}")
+    return "\n".join(out)
+
+
+def agg_flow_id(name):
+    return "agg-" + _slug(name)
+
+
 # ---------- entry point ----------
 def available(d, colors=None):
     """Return {id: dot} for every diagram that can be built from dir `d`."""
@@ -482,6 +626,16 @@ def available(d, colors=None):
     rels = workflow_relations_dot(parse_workflow_relations(wmd))
     if rels:
         out["wf-relations"] = rels
+
+    emd = _read(d, "domain-events.md")
+    eidx = parse_domain_events(emd)
+    for agg in parse_aggregates(_read(d, "aggregates.md")):
+        dot = aggregate_flow_dot(agg, eidx)
+        if dot:
+            out[agg_flow_id(agg["name"])] = dot
+    eflow = event_flow_dot(parse_event_flow(emd))
+    if eflow:
+        out["event-flow"] = eflow
     return out
 
 
@@ -520,6 +674,23 @@ def autoplace(slug, md, ids):
                 inserts.append((rel.end(), "\n\n<!-- ddd:diagram:wf-relations -->"))
         for pos, text in sorted(inserts, reverse=True):
             md = md[:pos] + text + md[pos:]
+        return md
+
+    if slug == "aggregates":
+        inserts = []
+        for h in re.finditer(r"^###\s+(.+?)\s*$", md, re.M):
+            name, _ = _agg_name(h.group(1).strip())
+            aid = agg_flow_id(name)
+            if aid in ids:
+                inserts.append((h.end(), "\n\n<!-- ddd:diagram:%s -->" % aid))
+        for pos, text in sorted(inserts, reverse=True):
+            md = md[:pos] + text + md[pos:]
+        return md
+
+    if slug == "domain-events" and "event-flow" in ids:
+        m = re.search(r"^##\s+Event Flow.*$", md, re.M)
+        if m:
+            md = md[:m.end()] + "\n\n<!-- ddd:diagram:event-flow -->" + md[m.end():]
         return md
 
     return md
