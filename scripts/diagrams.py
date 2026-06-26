@@ -54,6 +54,26 @@ def _esc(s):
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+def _slug(s):
+    return re.sub(r"[^a-z0-9]+", "-", s.strip().lower()).strip("-") or "x"
+
+
+# Shared dark-theme defaults so every diagram kind looks consistent.
+_NODE_DEFAULTS = ('node [shape=box, style=filled, fontname="sans-serif", '
+                  'fontsize=12, fillcolor="#1e293b", color="#94a3b8", '
+                  'fontcolor="#e2e8f0", margin="0.18,0.10"];')
+_EDGE_DEFAULTS = ('edge [fontname="sans-serif", fontsize=10, color="#94a3b8", '
+                  'fontcolor="#cbd5e1"];')
+
+
+def _header(name, rankdir="LR"):
+    return ["digraph %s {" % name,
+            '  rankdir="%s";' % rankdir,
+            '  bgcolor="transparent";',
+            "  " + _NODE_DEFAULTS,
+            "  " + _EDGE_DEFAULTS]
+
+
 def _read(d, name):
     p = os.path.join(d, name)
     if not os.path.isfile(p):
@@ -238,13 +258,268 @@ def context_map_dot(contexts, relations, colors=None):
     return "\n".join(out)
 
 
+# ---------- workflows (Phase 9) ----------
+# Side-effect category → edge color (the DMMF "I/O at the edges" story).
+EFFECT_COLOR = {
+    "readonly": "#60a5fa",   # read-only master lookup
+    "write":    "#f59e0b",   # state mutation / persistence
+    "message":  "#a855f7",   # send-message / fire-and-forget
+    "pure":     "#94a3b8",   # no I/O
+}
+
+
+def _classify_effect(text):
+    t = text.lower()
+    if "send" in t or "messag" in t or "メッセージ" in t:
+        return "message"
+    if "write" in t or "書" in t:
+        return "write"
+    if "read" in t or "照会" in t or "参照" in t:
+        return "readonly"
+    return "pure"
+
+
+def _split_events(text):
+    """`BillableOrderPlaced(成功時), OrderPlaced(常に)` → ['BillableOrderPlaced', ...]."""
+    out = []
+    for chunk in re.split(r"[,、]", text):
+        m = re.match(r"\s*`?([A-Za-z][A-Za-z0-9_]+)", chunk)
+        if m and m.group(1).lower() not in ("なし", "none"):
+            out.append(m.group(1))
+    return out
+
+
+def _arrows(line):
+    """Split a `A → B -> C` chain into ['A','B','C'] (handles →, ->, ⇒)."""
+    parts = re.split(r"\s*(?:→|⇒|->)\s*", line.strip())
+    return [re.sub(r"[`*]", "", p).strip() for p in parts if p.strip()]
+
+
+def parse_workflows(md):
+    """Parse `## Workflow N: Name (BC)` blocks → list of workflow dicts.
+
+    Each: {name, bc, stages:[type...], steps:[{name,effect,events,fails}...]}.
+    """
+    if not md:
+        return []
+    heads = list(re.finditer(r"^##\s+Workflow\s+\d+\s*[:：]\s*(.+?)\s*$", md, re.M))
+    out = []
+    for k, h in enumerate(heads):
+        body = md[h.end():(heads[k + 1].start() if k + 1 < len(heads) else len(md))]
+        raw = h.group(1).strip()
+        bc = ""
+        pm = re.search(r"\(([^)]*)\)\s*$", raw)
+        name = raw
+        if pm:
+            bc = pm.group(1).replace("BC", "").strip()
+            name = raw[:pm.start()].strip()
+
+        # stages: first arrow-bearing line inside any fence under "### ステージ"
+        stages = []
+        sec = re.search(r"###\s+ステージ.*?```(.*?)```", body, re.S)
+        if sec:
+            for ln in sec.group(1).split("\n"):
+                if "→" in ln or "->" in ln or "⇒" in ln:
+                    stages = _arrows(ln)
+                    break
+
+        # steps
+        steps = []
+        for sm in re.finditer(r"^####\s+Step\s*\d*\s*[:：]?\s*(.+?)\s*$", body, re.M):
+            sname = re.sub(r"[`*]", "", sm.group(1)).strip()
+            sbody = body[sm.end():]
+            nxt = re.search(r"^####\s", sbody, re.M)
+            if nxt:
+                sbody = sbody[:nxt.start()]
+            effect, events, fails = "pure", [], False
+
+            def field(label):
+                m = re.search(r"^\s*[-*]\s*%s\s*[:：]\s*(.+)$" % label, sbody, re.M)
+                return m.group(1).strip() if m else ""
+
+            eff = field(r"副作用")
+            if eff:
+                effect = _classify_effect(eff)
+            ev = field(r"発行\s*(?:Event|イベント)")
+            if ev:
+                events = _split_events(ev)
+            err = field(r"エラー")
+            out_t = field(r"出力")
+            if (err and err.replace("なし", "").strip()) or "Result" in out_t or "Error" in out_t:
+                fails = True
+            steps.append({"name": sname, "effect": effect,
+                          "events": events, "fails": fails})
+
+        if stages or steps:
+            out.append({"name": name, "bc": bc, "stages": stages, "steps": steps})
+    return out
+
+
+def parse_workflow_relations(md):
+    """`PlaceOrder --[OrderPlaced]--> ShipOrder` lines → [{from,event,to}]."""
+    out = []
+    if not md:
+        return out
+    for m in re.finditer(r"([A-Za-z][\w]*)\s*--\[([^\]]*)\]-->\s*([A-Za-z][\w]*)", md):
+        out.append({"from": m.group(1), "event": m.group(2).strip(), "to": m.group(3)})
+    return out
+
+
+def workflow_pipeline_dot(wf):
+    """One workflow → railway-style pipeline DOT.
+
+    Stage types are the boxes (rising trust left→right). Steps are the edges,
+    colored by side-effect (read/write/message/pure). Emitted events hang off
+    the produced stage as gold notes. Fallible steps fork to a red error sink
+    (Result / OR-type = the DMMF two-track railway).
+    """
+    stages = wf["stages"]
+    steps = wf["steps"]
+    out = _header("wf_" + _slug(wf["name"]))
+    if not stages:
+        # no stage chain to draw
+        return None
+
+    for i, st in enumerate(stages):
+        edge = "#22c55e" if i == 0 else ("#7dd3fc" if i == len(stages) - 1 else "#94a3b8")
+        out.append('  "%s" [label="%s", color="%s", penwidth="1.6"];'
+                   % (_esc(st), _esc(st), edge))
+
+    err_id = "__err_%s" % _slug(wf["name"])
+    needs_err = False
+    evt_seen = set()
+
+    for i in range(len(stages) - 1):
+        src, dst = stages[i], stages[i + 1]
+        step = steps[i] if i < len(steps) else None
+        if step:
+            color = EFFECT_COLOR.get(step["effect"], "#94a3b8")
+            label = step["name"]
+            out.append('  "%s" -> "%s" [label="%s", color="%s", '
+                       'penwidth="1.8", fontcolor="%s"];'
+                       % (_esc(src), _esc(dst), _esc(label), color, color))
+            if step["fails"]:
+                needs_err = True
+                out.append('  "%s" -> "%s" [color="#ef4444", style="dashed", '
+                           'arrowhead="empty"];' % (_esc(src), _esc(err_id)))
+            for ev in step["events"]:
+                nid = "evt_%s" % _slug(ev)
+                if nid not in evt_seen:
+                    evt_seen.add(nid)
+                    out.append('  "%s" [label="%s", shape=note, fillcolor="#422006", '
+                               'color="#f59e0b", fontcolor="#fde68a"];'
+                               % (nid, _esc(ev)))
+                out.append('  "%s" -> "%s" [color="#f59e0b", style="dotted", '
+                           'arrowhead="none", constraint=false];'
+                           % (_esc(dst), nid))
+        else:
+            out.append('  "%s" -> "%s";' % (_esc(src), _esc(dst)))
+
+    # events emitted by trailing steps (beyond the stage chain) → last stage
+    for step in steps[max(len(stages) - 1, 0):]:
+        for ev in step["events"]:
+            nid = "evt_%s" % _slug(ev)
+            if nid not in evt_seen:
+                evt_seen.add(nid)
+                out.append('  "%s" [label="%s", shape=note, fillcolor="#422006", '
+                           'color="#f59e0b", fontcolor="#fde68a"];' % (nid, _esc(ev)))
+            out.append('  "%s" -> "%s" [color="#f59e0b", style="dotted", '
+                       'arrowhead="none", constraint=false];'
+                       % (_esc(stages[-1]), nid))
+        if step["fails"]:
+            needs_err = True
+            out.append('  "%s" -> "%s" [color="#ef4444", style="dashed", '
+                       'arrowhead="empty"];' % (_esc(stages[-1]), _esc(err_id)))
+
+    if needs_err:
+        out.append('  "%s" [label="⚠ %s Error", shape=box, style="filled,dashed", '
+                   'fillcolor="#450a0a", color="#ef4444", fontcolor="#fca5a5"];'
+                   % (_esc(err_id), _esc(wf["name"])))
+    out.append("}")
+    return "\n".join(out)
+
+
+def workflow_relations_dot(rels):
+    """Workflow-to-workflow event graph: nodes=workflows, edges=domain events."""
+    if not rels:
+        return None
+    out = _header("wf_relations")
+    names = []
+    for r in rels:
+        for n in (r["from"], r["to"]):
+            if n not in names:
+                names.append(n)
+    for n in names:
+        out.append('  "%s" [color="#7dd3fc", penwidth="1.6"];' % _esc(n))
+    for r in rels:
+        lbl = r["event"]
+        out.append('  "%s" -> "%s" [label="%s", color="#a855f7", '
+                   'fontcolor="#d8b4fe", penwidth="1.5"];'
+                   % (_esc(r["from"]), _esc(r["to"]), _esc(lbl)))
+    out.append("}")
+    return "\n".join(out)
+
+
+def wf_pipeline_id(name):
+    return "wf-" + _slug(name)
+
+
 # ---------- entry point ----------
 def available(d, colors=None):
-    """Return {kind: dot} for every diagram that can be built from dir `d`."""
+    """Return {id: dot} for every diagram that can be built from dir `d`."""
     out = {}
     cmap = _read(d, "context-map.md")
     contexts = parse_contexts(_read(d, "bounded-contexts.md"))
     relations = parse_context_map(cmap)
     if relations or len(contexts) > 1:
         out["context-map"] = context_map_dot(contexts, relations, colors)
+
+    wmd = _read(d, "workflows.md")
+    for wf in parse_workflows(wmd):
+        dot = workflow_pipeline_dot(wf)
+        if dot:
+            out[wf_pipeline_id(wf["name"])] = dot
+    rels = workflow_relations_dot(parse_workflow_relations(wmd))
+    if rels:
+        out["wf-relations"] = rels
     return out
+
+
+def autoplace(slug, md, ids):
+    """Insert `<!-- ddd:diagram:ID -->` markers into `md` at sensible anchors.
+
+    Centralizes placement so build_site.py stays generic. No-op if the doc
+    already carries a marker. Returns the (possibly) rewritten markdown.
+    """
+    if "ddd:diagram:" in md:
+        return md
+
+    if slug == "context-map" and "context-map" in ids:
+        return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
+                      md, count=1, flags=re.M)
+
+    if slug == "workflows":
+        # one pipeline per workflow, placed after that workflow's stage fence;
+        # the relations graph after the relations fence.
+        heads = list(re.finditer(r"^##\s+Workflow\s+\d+\s*[:：]\s*(.+?)\s*$", md, re.M))
+        inserts = []  # (position, text)
+        for k, h in enumerate(heads):
+            seg_end = heads[k + 1].start() if k + 1 < len(heads) else len(md)
+            raw = h.group(1).strip()
+            name = re.sub(r"\([^)]*\)\s*$", "", raw).strip()
+            wid = wf_pipeline_id(name)
+            if wid not in ids:
+                continue
+            fence = re.search(r"###\s+ステージ.*?```.*?```", md[h.end():seg_end], re.S)
+            if fence:
+                pos = h.end() + fence.end()
+                inserts.append((pos, "\n\n<!-- ddd:diagram:%s -->" % wid))
+        if "wf-relations" in ids:
+            rel = re.search(r"##\s+ワークフロー間の関係図.*?```.*?```", md, re.S)
+            if rel:
+                inserts.append((rel.end(), "\n\n<!-- ddd:diagram:wf-relations -->"))
+        for pos, text in sorted(inserts, reverse=True):
+            md = md[:pos] + text + md[pos:]
+        return md
+
+    return md

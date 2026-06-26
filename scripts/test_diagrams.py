@@ -68,6 +68,66 @@ def test_dot_conventions():
     assert dot.startswith("digraph context_map {") and dot.rstrip().endswith("}")
 
 
+WORKFLOWS_MD = """# Workflows
+## Workflow 1: PlaceOrder (Order-Taking BC)
+### ステージ(中間型の系列)
+```
+UnvalidatedOrder → ValidatedOrder → PricedOrder
+```
+### ステップ
+#### Step 1: validateOrder
+- 出力: `Result<ValidatedOrder, ValidationError>`
+- 副作用: read-only
+- エラー: `InvalidProductCode`
+- 発行 Event: なし
+#### Step 2: priceOrder
+- 出力: `Result<PricedOrder, PricingError>`
+- 副作用: write
+- 発行 Event: `BillableOrderPlaced`(成功時)
+## ワークフロー間の関係図
+```
+PlaceOrder --[OrderPlaced]--> ShipOrder
+```
+"""
+
+
+def test_parse_workflows():
+    wfs = diagrams.parse_workflows(WORKFLOWS_MD)
+    assert len(wfs) == 1
+    wf = wfs[0]
+    assert wf["name"] == "PlaceOrder" and wf["bc"] == "Order-Taking"
+    assert wf["stages"] == ["UnvalidatedOrder", "ValidatedOrder", "PricedOrder"]
+    assert wf["steps"][0]["effect"] == "readonly" and wf["steps"][0]["fails"]
+    assert wf["steps"][1]["effect"] == "write"
+    assert wf["steps"][1]["events"] == ["BillableOrderPlaced"]
+
+
+def test_workflow_pipeline_dot():
+    wf = diagrams.parse_workflows(WORKFLOWS_MD)[0]
+    dot = diagrams.workflow_pipeline_dot(wf)
+    # stage nodes + step edges
+    assert '"UnvalidatedOrder" -> "ValidatedOrder"' in dot
+    assert "validateOrder" in dot and "priceOrder" in dot
+    # event note + error sink (railway)
+    assert "shape=note" in dot and "BillableOrderPlaced" in dot
+    assert "Error" in dot and "#ef4444" in dot
+    assert diagrams.workflow_pipeline_dot({"name": "x", "stages": [], "steps": []}) is None
+
+
+def test_workflow_relations_and_autoplace():
+    rels = diagrams.parse_workflow_relations(WORKFLOWS_MD)
+    assert rels == [{"from": "PlaceOrder", "event": "OrderPlaced", "to": "ShipOrder"}]
+    dot = diagrams.workflow_relations_dot(rels)
+    assert '"PlaceOrder" -> "ShipOrder"' in dot and "OrderPlaced" in dot
+    # autoplace inserts a marker per workflow pipeline + the relations graph
+    ids = ["wf-placeorder", "wf-relations"]
+    placed = diagrams.autoplace("workflows", WORKFLOWS_MD, ids)
+    assert "<!-- ddd:diagram:wf-placeorder -->" in placed
+    assert "<!-- ddd:diagram:wf-relations -->" in placed
+    # idempotent: a doc already carrying a marker is left alone
+    assert diagrams.autoplace("workflows", placed, ids) == placed
+
+
 def test_available_edges():
     # empty dir → nothing
     assert diagrams.available(tempfile.mkdtemp()) == {}

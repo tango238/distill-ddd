@@ -26,15 +26,18 @@
 それを各ページに埋め込む。ブラウザ側で **viz-standalone.js（Graphviz の WASM 版）** が DOT を
 インライン SVG に描画する（完全オフライン・`dot` バイナリ不要・CDN 不要）。
 
-**Phase A で対応する図:**
+**対応する図:**
 
 | 図 | 入力（正本 md の構造化部分） | 表現 |
 |----|------------------------------|------|
 | Context Map | `context-map.md` の関係テーブル + `bounded-contexts.md` の `### 名前 (Core/Supporting/Generic)` | コンテキスト=ノード（色分け／Core=太枠・Generic=破線）、関係=ラベル付きエッジ（C/S・ACL=ダイヤ矢印・OHS/PL）。**Partnership/Shared Kernel は双方向**、**Separate Ways/Big Ball of Mud/🔴 付箋は赤エッジ**で問題を可視化 |
+| Workflow パイプライン（1ワークフロー1図） | `workflows.md` の `### ステージ` 系列 + `#### Step` の副作用・発行 Event・エラー | ステージ型=ノード（左→右で信頼水準が上がる）、ステップ=エッジ（副作用で色分け: read=青/write=橙/message=紫/pure=灰）、**発行イベント=金色のノート**、**失敗しうるステップは赤破線で `⚠ Error` sink にフォーク**（Result 型＝DMMF の2トラック鉄道） |
+| Workflow 間の関係図 | `workflows.md` の `## ワークフロー間の関係図`（`A --[Event]--> B`） | ワークフロー=ノード、ドメインイベント=紫のラベル付きエッジ（イベント駆動の連鎖） |
 
-**図の配置:** 既定では各 `*.md` の `# 見出し` 直下に、ファイル名と同名の図を自動挿入する
-（例: `context-map.md` → Context Map 図）。位置を明示したい場合は md 本文に
-`<!-- ddd:diagram:context-map -->` を置くと、そこに描画される。
+**図の配置:** 既定では構造化部分の直近に自動挿入する（`context-map.md` → `#` 直下、
+`workflows.md` → 各ワークフローの `### ステージ` 直後 + 関係図フェンス直後）。位置を明示したい場合は
+md 本文に `<!-- ddd:diagram:context-map -->` / `<!-- ddd:diagram:wf-<workflow名> -->` /
+`<!-- ddd:diagram:wf-relations -->` を置くと、そこに描画される。
 
 **各図の操作ボタン**（jig 由来・vanilla JS）: `⇄` 方向切替（LR⇄TB）/ `⬇ SVG` ダウンロード / `⧉ DOT` ソースコピー。
 

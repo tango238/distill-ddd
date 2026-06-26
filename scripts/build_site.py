@@ -362,12 +362,9 @@ def main(argv):
     for slug in slugs:
         with open(os.path.join(d, slug + ".md"), encoding="utf-8") as fh:
             md = fh.read()
-        # Auto-place a diagram below the H1 if the doc has matching DOT but no
-        # explicit <!-- ddd:diagram:KIND --> marker (slug == diagram kind).
-        if dots.get(slug) and "ddd:diagram:" not in md:
-            md = re.sub(r"(^#\s+.+$)",
-                        r"\1\n\n<!-- ddd:diagram:%s -->" % slug,
-                        md, count=1, flags=re.M)
+        # Auto-place diagram markers (diagrams.py owns the per-kind anchors).
+        if dots and diagrams is not None:
+            md = diagrams.autoplace(slug, md, dots)
         titles[slug] = first_h1(md) or slug
         bodies[slug] = md_to_html(md, dots)
         has_graph[slug] = "jig-graph" in bodies[slug]
