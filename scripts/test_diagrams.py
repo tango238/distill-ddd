@@ -10,6 +10,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import diagrams  # noqa: E402
+import build_site  # noqa: E402
 
 
 CONTEXTS_MD = """# Bounded Contexts
@@ -201,6 +202,39 @@ def test_available_edges():
     assert "context-map" in diagrams.available(d)
     # garbage table without Upstream header → no rows
     assert diagrams.parse_context_map("| a | b |\n|---|---|\n| 1 | 2 |") == []
+
+
+GLOSSARY_MD = """# 用語集
+## Order-Taking
+| 用語 | 英語 | 定義 |
+|------|------|------|
+| 注文 | Order | 購入意思の集約 |
+| 注文明細 | OrderLine | 1商品の数量と価格 |
+## コンテキスト横断の注意点
+| 用語 | A での意味 | B での意味 |
+|------|-----------|-----------|
+| Order | 集約 | 参照ID |
+"""
+
+
+def test_parse_glossary_terms():
+    rows = build_site.parse_glossary_terms(
+        "| 用語 | 英語 | 定義 |\n|--|--|--|\n| 注文 | Order | 集約 |\n")
+    assert rows == [{"term": "注文", "en": "Order", "def": "集約"}]
+    # a cross-context table (用語 | 意味A | 意味B) is NOT a term glossary
+    assert build_site.parse_glossary_terms(
+        "| 用語 | A | B |\n|--|--|--|\n| Order | x | y |\n") is None
+
+
+def test_glossary_body():
+    body = build_site.glossary_body(GLOSSARY_MD)
+    assert body is not None
+    assert body.count('class="gl-card"') == 2          # only the term table
+    assert "gl-toggle" in body and "gl-filter" in body  # toggle + filter present
+    assert "OrderLine" in body                          # physical (English) name
+    assert "<table>" in body                            # cross-context falls back
+    # a doc with no term table → None (caller uses default renderer)
+    assert build_site.glossary_body("# x\n## y\nplain text\n") is None
 
 
 def main():
