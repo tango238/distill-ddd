@@ -5,6 +5,7 @@ No pytest dependency (matches the publish toolchain's "standard library only"
 rule). Exits non-zero on the first failed assertion.
 """
 import os
+import re
 import sys
 import tempfile
 
@@ -125,6 +126,34 @@ def test_graph_id_quoted_for_hyphenated_names():
     rel = diagrams.workflow_relations_dot(
         [{"from": "A", "event": "E", "to": "B"}])
     assert rel.startswith('digraph "wf_relations" {')
+
+
+def test_slug_collision_resistant_and_dot_safe():
+    # Codex P2: Japanese headings used to both slug to "x" and collide.
+    a, b = diagrams._slug("注文"), diagrams._slug("請求")
+    assert a != b
+    for s in (a, b):
+        assert re.match(r"^[a-z0-9-]+$", s)        # DOT-safe, no non-ASCII
+    # ASCII names stay readable (no hash suffix)
+    assert diagrams._slug("Place Order") == "place-order"
+    # two Japanese aggregates produce two distinct diagrams (no overwrite)
+    jp = ("# Aggregates\n"
+          "### 注文\n**操作**:\n- `place()`: x → 発行: `OrderPlaced`\n"
+          "### 請求\n**操作**:\n- `bill()`: y → 発行: `Billed`\n")
+    ids = {diagrams.agg_flow_id(a["name"]) for a in diagrams.parse_aggregates(jp)}
+    assert len(ids) == 2  # distinct ids, not both "agg-x"
+
+
+def test_autoplace_partial_marker_keeps_others():
+    # Codex P2: one hand-placed marker must not suppress the other diagrams.
+    md = WORKFLOWS_MD.replace(
+        "## Workflow 1: PlaceOrder (Order-Taking BC)",
+        "<!-- ddd:diagram:wf-placeorder -->\n## Workflow 1: PlaceOrder (Order-Taking BC)")
+    out = diagrams.autoplace("workflows", md, ["wf-placeorder", "wf-relations"])
+    # the explicit one is not duplicated...
+    assert out.count("ddd:diagram:wf-placeorder") == 1
+    # ...but the relations graph is still auto-inserted
+    assert "ddd:diagram:wf-relations" in out
 
 
 def test_workflow_relations_and_autoplace():

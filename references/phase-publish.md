@@ -41,7 +41,10 @@
 `aggregates.md` → 各 `### 集約` 直後、`domain-events.md` → `## Event Flow` 直後）。位置を明示したい場合は
 md 本文に `<!-- ddd:diagram:context-map -->` / `<!-- ddd:diagram:wf-<workflow名> -->` /
 `<!-- ddd:diagram:wf-relations -->` / `<!-- ddd:diagram:agg-<集約名> -->` /
-`<!-- ddd:diagram:event-flow -->` を置くと、そこに描画される。
+`<!-- ddd:diagram:event-flow -->` を置くと、そこに描画される。1ファイルに複数図がある場合、
+明示マーカーは**その図だけ**位置を上書きし、残りは従来どおり自動挿入される。
+（ASCII 名は `wf-place-order` のように読める ID になるが、**日本語など非 ASCII 名はハッシュ付き ID**
+になり手書きしづらいので、その場合は自動挿入に任せるのが楽。）
 
 **各図の操作ボタン**（jig 由来・vanilla JS）: `⇄` 方向切替（LR⇄TB）/ `⬇ SVG` ダウンロード / `⧉ DOT` ソースコピー。
 

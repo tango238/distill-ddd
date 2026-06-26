@@ -13,6 +13,7 @@ the corresponding diagram is simply absent — never a hard error.
 Phase A ships one diagram kind: "context-map". More kinds (workflow,
 aggregate-event, glossary) plug into the same `dot_for(kind, dir)` entry point.
 """
+import hashlib
 import os
 import re
 
@@ -55,7 +56,19 @@ def _esc(s):
 
 
 def _slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", s.strip().lower()).strip("-") or "x"
+    """Stable, collision-resistant, DOT-safe id for a diagram/graph name.
+
+    Pure-ASCII names keep a readable slug ("Place Order" -> "place-order").
+    Non-ASCII names (e.g. Japanese headings 注文 / 請求, which would both reduce
+    to an empty slug and collide) get a short hash of the full name appended, so
+    distinct names always map to distinct ids.
+    """
+    s = s.strip()
+    base = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+    if base and not re.search(r"[^\x00-\x7f]", s):
+        return base
+    h = hashlib.sha1(s.encode("utf-8")).hexdigest()[:8]
+    return (base + "-" + h) if base else "x" + h
 
 
 # Shared dark-theme defaults so every diagram kind looks consistent.
@@ -644,13 +657,16 @@ def available(d, colors=None):
 def autoplace(slug, md, ids):
     """Insert `<!-- ddd:diagram:ID -->` markers into `md` at sensible anchors.
 
-    Centralizes placement so build_site.py stays generic. No-op if the doc
-    already carries a marker. Returns the (possibly) rewritten markdown.
+    Centralizes placement so build_site.py stays generic. Skipping is per-ID:
+    a hand-placed `<!-- ddd:diagram:X -->` only suppresses *that* diagram's
+    auto-insertion, so adding one explicit marker in a multi-diagram file
+    (workflows.md / aggregates.md) doesn't drop every other generated diagram.
+    Returns the (possibly) rewritten markdown.
     """
-    if "ddd:diagram:" in md:
-        return md
+    def present(i):
+        return ("ddd:diagram:%s" % i) in md
 
-    if slug == "context-map" and "context-map" in ids:
+    if slug == "context-map" and "context-map" in ids and not present("context-map"):
         return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
                       md, count=1, flags=re.M)
 
@@ -664,13 +680,13 @@ def autoplace(slug, md, ids):
             raw = h.group(1).strip()
             name = re.sub(r"\([^)]*\)\s*$", "", raw).strip()
             wid = wf_pipeline_id(name)
-            if wid not in ids:
+            if wid not in ids or present(wid):
                 continue
             fence = re.search(r"###\s+ステージ.*?```.*?```", md[h.end():seg_end], re.S)
             if fence:
                 pos = h.end() + fence.end()
                 inserts.append((pos, "\n\n<!-- ddd:diagram:%s -->" % wid))
-        if "wf-relations" in ids:
+        if "wf-relations" in ids and not present("wf-relations"):
             rel = re.search(r"##\s+ワークフロー間の関係図.*?```.*?```", md, re.S)
             if rel:
                 inserts.append((rel.end(), "\n\n<!-- ddd:diagram:wf-relations -->"))
@@ -683,13 +699,13 @@ def autoplace(slug, md, ids):
         for h in re.finditer(r"^###\s+(.+?)\s*$", md, re.M):
             name, _ = _agg_name(h.group(1).strip())
             aid = agg_flow_id(name)
-            if aid in ids:
+            if aid in ids and not present(aid):
                 inserts.append((h.end(), "\n\n<!-- ddd:diagram:%s -->" % aid))
         for pos, text in sorted(inserts, reverse=True):
             md = md[:pos] + text + md[pos:]
         return md
 
-    if slug == "domain-events" and "event-flow" in ids:
+    if slug == "domain-events" and "event-flow" in ids and not present("event-flow"):
         m = re.search(r"^##\s+Event Flow.*$", md, re.M)
         if m:
             md = md[:m.end()] + "\n\n<!-- ddd:diagram:event-flow -->" + md[m.end():]
