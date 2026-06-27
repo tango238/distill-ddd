@@ -666,23 +666,36 @@ def autoplace(slug, md, ids):
     def present(i):
         return ("ddd:diagram:%s" % i) in md
 
-    if "context-map" in ids and not present("context-map"):
+    if "context-map" in ids:
         if slug == "context-map":
-            return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
-                          md, count=1, flags=re.M)
+            if not present("context-map"):
+                return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
+                              md, count=1, flags=re.M)
+            return md
         if slug == "bounded-contexts":
-            # The contexts phase template puts a hand-drawn "## Context Map 概要図"
-            # here. Place the generated diagram at that heading, dropping an
-            # immediately-following ASCII fence (the hand-drawn map IS this diagram,
-            # not literal <pre> text). Falls back to the H1 anchor if no such heading.
+            # The contexts phase template puts a "## Context Map 概要図" here, possibly
+            # with a hand-drawn ASCII fence AND/OR the template's own marker. Normalize
+            # the region right under that heading to exactly ONE marker and NO stale
+            # <pre> fence — and do it even when a marker is already present, otherwise a
+            # marker + a later hand-drawn fence would both render.
             hm = re.search(r"^#{2,}\s+.*Context\s*Map.*$", md, re.M)
             if hm:
-                rest = md[hm.end():]
-                fence = re.match(r"\s*\n```.*?```", rest, re.S)
-                cut = hm.end() + (fence.end() if fence else 0)
-                return md[:hm.end()] + "\n\n<!-- ddd:diagram:context-map -->\n" + md[cut:]
-            return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
-                          md, count=1, flags=re.M)
+                # consume consecutive blank lines / existing markers / one ASCII fence
+                tok = re.compile(
+                    r"[ \t]*\n"
+                    r"|[ \t]*<!--\s*ddd:diagram:context-map\s*-->[ \t]*\n?"
+                    r"|[ \t]*```[\s\S]*?```[ \t]*\n?")
+                i = hm.end()
+                while True:
+                    m = tok.match(md, i)
+                    if not m or m.end() == i:
+                        break
+                    i = m.end()
+                return md[:hm.end()] + "\n\n<!-- ddd:diagram:context-map -->\n" + md[i:]
+            if not present("context-map"):
+                return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
+                              md, count=1, flags=re.M)
+            return md
 
     if slug == "workflows":
         # one pipeline per workflow, placed after that workflow's stage fence;

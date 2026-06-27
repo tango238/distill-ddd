@@ -173,6 +173,23 @@ def test_context_map_autoplaced_in_bounded_contexts():
     assert diagrams.autoplace("bounded-contexts", out, ["context-map"]) == out
 
 
+def test_context_map_strips_fence_even_when_marker_present():
+    # Codex P2: a doc from the updated template already carries the marker; if the user
+    # also adds a hand-drawn ASCII fence, the fence must STILL be stripped (not rendered
+    # alongside the generated figure). Covers marker-before-fence and the dup-marker case.
+    md = (
+        "# Bounded Contexts\n\n"
+        "## Context Map 概要図\n\n"
+        "<!-- ddd:diagram:context-map -->\n"
+        "```\n hand-drawn ascii\n```\n\n"
+        "## Bounded Context 一覧\n"
+    )
+    out = diagrams.autoplace("bounded-contexts", md, ["context-map"])
+    assert "hand-drawn ascii" not in out          # fence dropped
+    assert out.count("ddd:diagram:context-map") == 1  # exactly one marker
+    assert diagrams.autoplace("bounded-contexts", out, ["context-map"]) == out  # idempotent
+
+
 def test_context_map_still_autoplaced_in_context_map_md():
     md = "# Context Map\n\n## 関係一覧\n\n| Upstream | Downstream |\n|---|---|\n"
     out = diagrams.autoplace("context-map", md, ["context-map"])
