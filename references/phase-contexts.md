@@ -54,7 +54,9 @@ Ch.2 の Challenge and Unify プロセス:
 
 ## Context Map 概要図
 
-{ASCII or Mermaid 図}
+<!-- ddd:diagram:context-map -->
+（publish が context-map.md の関係表 + 本ファイルの BC から Context Map 図を自動描画する。
+手描き ASCII を置いた場合も publish 時に自動図へ置き換わる。）
 
 ## Bounded Context 一覧
 

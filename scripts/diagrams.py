@@ -666,9 +666,23 @@ def autoplace(slug, md, ids):
     def present(i):
         return ("ddd:diagram:%s" % i) in md
 
-    if slug == "context-map" and "context-map" in ids and not present("context-map"):
-        return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
-                      md, count=1, flags=re.M)
+    if "context-map" in ids and not present("context-map"):
+        if slug == "context-map":
+            return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
+                          md, count=1, flags=re.M)
+        if slug == "bounded-contexts":
+            # The contexts phase template puts a hand-drawn "## Context Map 概要図"
+            # here. Place the generated diagram at that heading, dropping an
+            # immediately-following ASCII fence (the hand-drawn map IS this diagram,
+            # not literal <pre> text). Falls back to the H1 anchor if no such heading.
+            hm = re.search(r"^#{2,}\s+.*Context\s*Map.*$", md, re.M)
+            if hm:
+                rest = md[hm.end():]
+                fence = re.match(r"\s*\n```.*?```", rest, re.S)
+                cut = hm.end() + (fence.end() if fence else 0)
+                return md[:hm.end()] + "\n\n<!-- ddd:diagram:context-map -->\n" + md[cut:]
+            return re.sub(r"(^#\s+.+$)", r"\1\n\n<!-- ddd:diagram:context-map -->",
+                          md, count=1, flags=re.M)
 
     if slug == "workflows":
         # one pipeline per workflow, placed after that workflow's stage fence;
