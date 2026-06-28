@@ -246,6 +246,26 @@ shared sticky nav (current page highlighted) and rewriting intra-doc `.md` links
 See [references/phase-publish.md](references/phase-publish.md) for ASCII→SVG diagram tips and the
 optional `docs/domain/_site.json` (nav order/labels). The script is idempotent — rerun after edits.
 
+## Intent Export (`emit_intent.py`)
+
+distill-ddd owns *intent* — "what we meant to build". Downstream tools (e.g. crawl-kit's
+verification layer) need that intent as data, not prose. Export a contract-shaped `intent.json`
+("emit at the source"; Python 3 stdlib only):
+
+```
+python3 <SKILL_DIR>/scripts/emit_intent.py docs/domain      # → docs/domain/intent.json
+```
+
+It reads the human artifacts and emits the two axes that diff mechanically — **events** (from
+`domain-events.md`) and **state transitions** (from each aggregate's `**状態遷移**:` block in
+`aggregates.md`) — plus a thin concept list (aliases enriched from `glossary.md`) for canonical-id
+seeding. The shape is a superset of the legacy glossary fixture, so existing consumers keep working.
+
+State transitions are **decided interactively during the `aggregates` phase**, not guessed from
+prose — see [references/phase-aggregates.md](references/phase-aggregates.md) (Step 3.5). Keep the
+canonical line shape `- {from} → {to} : \`{trigger}\` → \`{event}\`` so the exporter reads it
+deterministically; mark stateless aggregates `**状態遷移**: なし`. Re-run after editing the model.
+
 ## Entry Point Behavior
 
 When `/ddd` is invoked without arguments:
