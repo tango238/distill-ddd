@@ -206,7 +206,9 @@ def parse_aggregates(md):
             continue
         indent, rest = len(b.group("indent")), b.group("rest")
         if indent == 0:
-            collecting_transitions = labelled_bullet(rest, *L_TRANSITIONS) == ""
+            # start collecting when the "状態遷移" label is present, even if it has
+            # trailing prose after the colon (e.g. "状態遷移: （コード由来…）").
+            collecting_transitions = labelled_bullet(rest, *L_TRANSITIONS) is not None
         elif collecting_transitions:
             t = _parse_transition(rest, agg, context)
             if t:

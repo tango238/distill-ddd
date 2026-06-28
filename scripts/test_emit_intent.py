@@ -66,6 +66,18 @@ AGGREGATES_MD = """# Aggregates
 - **状態遷移**: なし
 """
 
+# the "状態遷移" label carries trailing prose after the colon — collection must
+# still start (regression: events-less, code-derived ConceptState block).
+TRANSITIONS_WITH_PROSE_MD = """# Aggregates
+
+## 集約一覧
+
+### Concept（BC: Reconciliation）
+- **状態遷移**: （コード由来＝分類ロジックを明文化。発行イベントは持たない）
+  - ∅ → intent-only : `reconcile()`  （seed・構造未マッチ）
+  - intent-only → aligned : `attach()`  （構造が same-as でマッチ）
+"""
+
 GLOSSARY_MD = """# ユビキタス言語
 
 ## Sales
@@ -107,6 +119,15 @@ def test_explicit_transitions():
     assert (b["from"], b["to"], b["trigger"], b["event"]) == \
         ("Placed", "Shipped", "ship()", "OrderShipped")   # 発行 keyword form
     assert a["aggregate"] == "Order" and a["context"] == "Sales"
+
+
+def test_transitions_label_with_trailing_prose():
+    _, trans = emit_intent.parse_aggregates(TRANSITIONS_WITH_PROSE_MD)
+    assert [(t["from"], t["to"], t["trigger"]) for t in trans] == [
+        ("∅", "intent-only", "reconcile()"),
+        ("intent-only", "aligned", "attach()"),
+    ], trans
+    assert all(t["event"] is None for t in trans)  # code-derived → no emitted event
 
 
 def test_no_state_aggregate_emits_no_transition():
