@@ -318,6 +318,104 @@ def test_glossary_body():
     assert build_site.glossary_body("# x\n## y\nplain text\n") is None
 
 
+UNTIE_EXPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "fixtures", "untie-export")
+
+
+def test_untie_export_golden():
+    """docs/domain/*.md written by Untie's export must stay readable.
+
+    The fixtures are Untie's own snapshot (see fixtures/untie-export/README.md).
+    Installed copies of the skill ship without fixtures/, so skip there.
+    """
+    d = UNTIE_EXPORT_DIR
+    if not os.path.isdir(d):
+        return
+
+    def rd(name):
+        with open(os.path.join(d, name), encoding="utf-8") as f:
+            return f.read()
+
+    # bounded-contexts.md: every `### name (Subdomain)` is a context
+    ctx = diagrams.parse_contexts(rd("bounded-contexts.md"))
+    assert ctx == {"受注": {"subdomain": "Core"},
+                   "在庫": {"subdomain": "Supporting"},
+                   "出荷": {"subdomain": "Supporting"},
+                   "決済": {"subdomain": "Generic"},
+                   "会計": {"subdomain": "Generic"}}, ctx
+
+    # context-map.md: Upstream/Downstream table, canonical relation names
+    rows = diagrams.parse_context_map(rd("context-map.md"))
+    got = [(r["upstream"], r["downstream"], r["relation"], r["integration"])
+           for r in rows]
+    assert got == [
+        ("受注", "在庫", "Customer-Supplier", "Messaging"),
+        ("決済", "受注", "Anticorruption Layer", "Messaging"),
+        ("受注", "出荷", "Customer-Supplier", "RPC"),
+        ("出荷", "会計", "Published Language", "Messaging"),
+        ("受注", "会計", "Conformist", "File"),
+    ], got
+    for r in rows:   # context names line up with bounded-contexts.md
+        assert r["upstream"] in ctx and r["downstream"] in ctx, r
+        assert r["relation"] in diagrams.REL_ABBR, r
+
+    # aggregates.md: `### Name (Bounded Context: BC)` + commands → events
+    aggs = {a["name"]: a for a in diagrams.parse_aggregates(rd("aggregates.md"))}
+    assert sorted(aggs) == ["Order", "Payout", "Receivable", "ReturnRequest",
+                            "Shipment", "Stock"], sorted(aggs)
+    assert aggs["Order"]["bc"] == "受注" and aggs["Stock"]["bc"] == "在庫"
+    assert all(a["bc"] in ctx for a in aggs.values())
+    order = {c["name"]: c["event"] for c in aggs["Order"]["commands"]}
+    assert order == {"placeOrder": "OrderPlaced",
+                     "confirmOrder": "OrderConfirmed",
+                     "cancelOrder": "OrderCancelled",
+                     "markOrderPaid": "OrderPaid"}, order
+    # commands without an English name are listed outside **操作** and ignored
+    assert [c["name"] for c in aggs["Stock"]["commands"]] == [
+        "receiveStock", "allocateStock"], aggs["Stock"]["commands"]
+    assert aggs["Receivable"]["commands"] == []
+
+    # domain-events.md: `#### Name`, source aggregate, consumers, Event Flow
+    events_md = rd("domain-events.md")
+    ev = diagrams.parse_domain_events(events_md)
+    assert ev["OrderConfirmed"] == {"source": "Order", "trigger": "confirmOrder",
+                                    "consumers": ["在庫"]}, ev["OrderConfirmed"]
+    assert ev["PaymentConfirmed"]["consumers"] == ["受注"]
+    assert ev["PaymentConfirmed"]["source"] == ""        # external context
+    # every command's event has a block, and its source is that aggregate
+    for a in aggs.values():
+        for c in a["commands"]:
+            assert ev[c["event"]]["source"] == a["name"], (a["name"], c)
+    flow = diagrams.parse_event_flow(events_md)
+    assert [(f["from"], f["event"], f["to"]) for f in flow] == [
+        ("受注", "OrderConfirmed", "在庫"),
+        ("出荷", "OrderShipped", "会計"),
+        ("決済", "PaymentConfirmed", "受注"),
+    ], flow
+    assert all(f["from"] in ctx and f["to"] in ctx for f in flow)
+
+    # the whole folder yields every diagram, and the aggregate flow carries
+    # the command → aggregate → event chain
+    avail = diagrams.available(d)
+    assert sorted(avail) == ["agg-order", "agg-payout", "agg-receivable",
+                             "agg-returnrequest", "agg-shipment", "agg-stock",
+                             "context-map", "event-flow"], sorted(avail)
+    assert "cmd_placeorder" in avail["agg-order"]
+    assert "evt_orderplaced" in avail["agg-order"]
+    assert "ACL" in avail["context-map"]
+
+    # autoplace keeps the markers Untie wrote (one each, no duplicates)
+    for name, key in (("bounded-contexts", "context-map"),
+                      ("context-map", "context-map"),
+                      ("domain-events", "event-flow")):
+        placed = diagrams.autoplace(name, rd(name + ".md"), list(avail))
+        assert placed.count("<!-- ddd:diagram:%s -->" % key) == 1, name
+
+    # glossary.md: per-context term tables
+    body = build_site.glossary_body(rd("glossary.md"))
+    assert body is not None and "Allocation" in body and "Order" in body
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
